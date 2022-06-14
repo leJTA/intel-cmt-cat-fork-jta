@@ -58,6 +58,7 @@ static const enum pqos_mon_event os_mon_event[] = {
     PQOS_MON_EVENT_LMEM_BW,
     PQOS_MON_EVENT_TMEM_BW,
     PQOS_PERF_EVENT_LLC_MISS,
+	 PQOS_PERF_EVENT_LLC_REF,
     (enum pqos_mon_event)PQOS_PERF_EVENT_CYCLES,
     (enum pqos_mon_event)PQOS_PERF_EVENT_INSTRUCTIONS};
 
@@ -256,6 +257,7 @@ start_events(struct pqos_mon_data *group)
 start_event_error:
         /*  Check if all selected events were started */
         if ((group->event & started_evts) != group->event) {
+			  		 printf("%d %d\n", group->event, started_evts);
                 stop_events(group);
                 LOG_ERROR("Failed to start all selected "
                           "OS monitoring events\n");
