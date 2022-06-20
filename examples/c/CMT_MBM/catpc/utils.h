@@ -22,6 +22,16 @@ struct process_list {
 };
 
 /**
+ * The structure to store monitoring data for all of the events
+ */
+struct monitoring_data {
+	uint64_t llc;                /**< cache occupancy */
+	double ipc;                  /**< instructions per cycle */
+	uint64_t llc_misses;   /**< LLC misses - delta */
+	uint64_t llc_references;       /**< LLC references */
+};
+
+/**
  * @brief Returns the process tree from the parent pid
  * 
  * @param[in] ppid parent pid
@@ -51,5 +61,14 @@ int get_num_pids(struct process_tree* tree);
  * @return the current index
  */
 int tree_to_list(struct process_tree* tree, pid_t* pids, int index);
+
+/**
+ * @brief CATPC log function
+ * 
+ * @param [in] fp file pointer to the log file
+ * @param [in] fmt format string compatible with fprintf().
+ * @param [in] args variadic arguments to follow depending on \a fmt. 
+ */
+void log_fprint(FILE* fp, const char* fmt, ...);
 
 #endif

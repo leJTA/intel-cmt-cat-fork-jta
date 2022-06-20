@@ -1,5 +1,8 @@
 #include "utils.h"
 
+#include <stdarg.h>
+#include <time.h>
+
 struct process_tree* get_process_tree(pid_t ppid)
 {
 	if (kill(ppid, 0)) {
@@ -68,4 +71,22 @@ int tree_to_list(struct process_tree* tree, pid_t* pids, int index)
 	}
 
 	return i;
+}
+
+void log_fprint(FILE* fp, const char* fmt, ...)
+{
+	va_list args;
+	time_t timestamp;
+	struct tm* now;
+	char buff[70];
+	
+	time(&timestamp);
+	now  = localtime(&timestamp);
+	strftime(buff, sizeof buff, "%a %b %d %H:%M:%S", now);
+	
+	fprintf(fp, "[%s] ", buff);
+	va_start(args, fmt);
+	vfprintf(fp, fmt, args);
+	va_end(args);
+	fflush(fp);
 }
