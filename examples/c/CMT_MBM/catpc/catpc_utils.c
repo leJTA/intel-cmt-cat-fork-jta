@@ -1,4 +1,4 @@
-#include "utils.h"
+#include "catpc_utils.h"
 
 #include <stdarg.h>
 #include <time.h>
@@ -82,7 +82,7 @@ void log_fprint(FILE* fp, const char* fmt, ...)
 	
 	time(&timestamp);
 	now  = localtime(&timestamp);
-	strftime(buff, sizeof buff, "%a %b %d %H:%M:%S", now);
+	strftime(buff, sizeof buff, "%F %H:%M:%S", now);
 	
 	fprintf(fp, "[%s] ", buff);
 	va_start(args, fmt);

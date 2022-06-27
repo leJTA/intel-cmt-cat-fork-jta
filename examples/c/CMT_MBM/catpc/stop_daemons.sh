@@ -1,4 +1,6 @@
 #!/bin/bash
 
-pkill -9 master_daemon
-pkill -9 slave_daemon
+echo "pkill -15 master_daemon"
+pkill -15 master_daemon
+
+pqos -r

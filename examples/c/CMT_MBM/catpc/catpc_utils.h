@@ -1,5 +1,5 @@
-#ifndef __UTILS_H__
-#define __UTILS_H__
+#ifndef __CATPC_UTILS_H__
+#define __CATPC_UTILS_H__
 
 #include <stdint.h>
 #include <stdio.h>
@@ -10,6 +10,18 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "catpc_monitor.h"
+
+/**
+ * @brief CATPC message values
+ * 
+ */
+enum catpc_message {
+	CATPC_GET_MONITORING_VALUES = 0, /**< retrieve monitoring values */ 
+	CATPC_GET_ALLOCATION_CONF = 1,   /**< retrieve allocation configuration */ 
+	CATPC_PERFORM_ALLOCATION = 2     /**< perform allocation */
+};
+
 struct process_tree {
 	pid_t pid;
 	struct process_tree** children;
@@ -19,16 +31,6 @@ struct process_tree {
 struct process_list {
 	pid_t pid;
 	struct process_list* next;
-};
-
-/**
- * The structure to store monitoring data for all of the events
- */
-struct monitoring_data {
-	uint64_t llc;                /**< cache occupancy */
-	double ipc;                  /**< instructions per cycle */
-	uint64_t llc_misses;   /**< LLC misses - delta */
-	uint64_t llc_references;       /**< LLC references */
 };
 
 /**
@@ -63,7 +65,7 @@ int get_num_pids(struct process_tree* tree);
 int tree_to_list(struct process_tree* tree, pid_t* pids, int index);
 
 /**
- * @brief CATPC log function
+ * @brief logging function
  * 
  * @param [in] fp file pointer to the log file
  * @param [in] fmt format string compatible with fprintf().

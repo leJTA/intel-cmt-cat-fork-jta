@@ -38,7 +38,6 @@
 
 #include "pqos.h"
 #include "monitoring.h"
-#include "utils.h"
 
 #include <signal.h>
 #include <stdio.h>
