@@ -1,9 +1,48 @@
 #include "catpc_utils.h"
 
+#include <dirent.h>
 #include <stdarg.h>
 #include <time.h>
+#include <errno.h>
+#include <ctype.h>
 
-struct process_tree* get_process_tree(pid_t ppid)
+
+/**
+ * @brief filter for scandir.
+ *
+ * Skips entries starting with "."
+ * Skips non-numeric entries
+ *
+ * @param[in] dir scandir dirent entry
+ *
+ * @retval 0 for entries to be skipped
+ * @retval 1 otherwise
+ */
+static int filter_pids(const struct dirent *dir)
+{
+	size_t char_idx;
+
+	if (dir->d_name[0] == '.')
+		return 0;
+
+	for (char_idx = 0; char_idx < strlen(dir->d_name); ++char_idx) {
+		if (!isdigit(dir->d_name[char_idx]))
+			return 0;
+	}
+
+	return 1;
+}
+
+
+/**
+ * @brief Returns the process tree from the parent pid
+ * 
+ * @param [in] ppid parent pid
+ * @param [in] allow_task_lookup allow siblings lookup or not
+ * 
+ * @return process_tree
+ */
+static struct process_tree* _get_process_tree(pid_t ppid, int allow_task_lookup)
 {
 	if (kill(ppid, 0)) {
 		fprintf(stderr, "PID %d does not exist.\n", ppid);
@@ -11,41 +50,70 @@ struct process_tree* get_process_tree(pid_t ppid)
 	}
 
 	struct process_tree* tree = (struct process_tree*)malloc(sizeof(struct process_tree));
-	char buf[128];
+	struct dirent** namelist;
+	char buf[512];
 	FILE* file;
-	int count = 0;
+	int sibling_count = 0, child_count = 0, n = 0, i = 0;
 
 	tree->pid = ppid;
 	tree->children = NULL;
 
+	// Get all siblings
+	if (allow_task_lookup) {
+		sprintf(buf, "/proc/%d/task", (int)ppid);
+		n = scandir(buf, &namelist, filter_pids, NULL);
+		sibling_count = n - 1;
+		if (n == -1) {
+			fprintf(stderr, "ERROR: scandir (%s): %s\n", buf, strerror(errno));
+			return NULL;
+		}
+
+		tree->children = (struct process_tree**)malloc((sibling_count) * sizeof(struct process_tree*));	// sibling_count - 1 because we do not count the current(parent) process
+		while (--n) {
+			ppid = atoi(namelist[n]->d_name);
+			if (tree->pid == ppid) {	// skip the current process
+				continue;
+			}
+			tree->children[i] = _get_process_tree(ppid, 0);
+			i++;
+		}
+	}
+
+
+
+	// Get all children
 	sprintf(buf, "/proc/%d/task/%d/children", (int)ppid, (int)ppid);
 	file = fopen(buf, "r+");
-
 	if (file == NULL) {
 		fprintf(stderr, "PID %d : unable to open children file.\n", ppid);
 		return NULL;
 	}
 
+	memset(buf, 0, sizeof(buf));
 	while ( fscanf(file, "%s", buf) != EOF) {
-		count++;
+		child_count++;
 	}
-
-	tree->child_count = count;
-	if (count > 0) {
-		int i = 0;
-		tree->children = (struct process_tree**)malloc(count * sizeof(struct process_tree*));
+	
+	tree->child_count = sibling_count + child_count;
+	if (child_count > 0) {
+		tree->children = (struct process_tree**)realloc(tree->children, tree->child_count * sizeof(struct process_tree*));
 		
 		fseek(file, 0, SEEK_SET);
-		for (i = 0; i < tree->child_count; ++i) {
+		for (i = 0; i < child_count; ++i) {
 			fscanf(file, "%s", buf);
 			ppid = atoi(buf);
-			tree->children[i] = get_process_tree(ppid);
+			tree->children[i] = _get_process_tree(ppid, 1);
 		}
 	}
 
 	fclose(file);
 	return tree;	
 	
+}
+
+struct process_tree* get_process_tree(pid_t ppid)
+{
+	return _get_process_tree(ppid, 1);
 }
 
 int get_num_pids(struct process_tree* tree)

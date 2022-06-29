@@ -35,7 +35,7 @@ int start_monitoring(void)
 	unsigned i;
 
 	memset(&config, 0, sizeof(config));
-	config.fd_log = STDOUT_FILENO;
+	config.fd_log = 0;
 	config.verbose = 0;
 	config.interface = PQOS_INTER_OS;
 

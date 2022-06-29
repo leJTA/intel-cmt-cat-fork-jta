@@ -19,7 +19,8 @@
 enum catpc_message {
 	CATPC_GET_MONITORING_VALUES = 0, /**< retrieve monitoring values */ 
 	CATPC_GET_ALLOCATION_CONF = 1,   /**< retrieve allocation configuration */ 
-	CATPC_PERFORM_ALLOCATION = 2     /**< perform allocation */
+	CATPC_PERFORM_ALLOCATION = 2,    /**< perform allocation */
+	CATPC_ADD_APP_TO_MONITOR = 3		/**< add application to monitor */
 };
 
 struct process_tree {
@@ -36,11 +37,10 @@ struct process_list {
 /**
  * @brief Returns the process tree from the parent pid
  * 
- * @param[in] ppid parent pid
+ * @param [in] ppid parent pid
  * 
  * @return process_tree
  */
-
 struct process_tree* get_process_tree(pid_t ppid);
 
 /**

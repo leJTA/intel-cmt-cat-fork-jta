@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "utils.h"
+#include "catpc_utils.h"
 
 int main(int argc, char** argv)
 {
@@ -10,6 +10,9 @@ int main(int argc, char** argv)
 	pid_t pid = atoi(argv[1]);
 
 	struct process_tree* tree = get_process_tree(pid);
+	if (tree == NULL) {
+		printf("Ooopss!!\n");
+	}
 	int pid_count = get_num_pids(tree);
 	pid_t* pids = (pid_t*)malloc(pid_count * sizeof(pid_t));
 
