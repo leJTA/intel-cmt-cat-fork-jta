@@ -12,6 +12,7 @@ int main(int argc, char** argv)
 	struct process_tree* tree = get_process_tree(pid);
 	if (tree == NULL) {
 		printf("Ooopss!!\n");
+		return 1;
 	}
 	int pid_count = get_num_pids(tree);
 	pid_t* pids = (pid_t*)malloc(pid_count * sizeof(pid_t));
