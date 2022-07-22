@@ -61,8 +61,10 @@ int main(int argc, char** argv)
 	int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	int bytes_read = 0, bytes_sent = 0;
 	enum catpc_message msg;
+	std::string cmdline;
+	size_t sz;
 	int ret = 0;
-	size_t sz = 0;
+	char buf[512];
 
 	log_file = fopen("/var/log/catpc.slave.log", "w");
 	if (log_file == NULL) {
@@ -70,11 +72,9 @@ int main(int argc, char** argv)
 	}
 
 	// Start Monitoring
-	std::string cl{ "../run_base_ref_gnu_mpi.0009/hpgmgfv_base.gnu_mpi59300" };
-	applications[cl] = new application{.cmdline = cl, .values = monitoring_values(), .CLOS_id = 0};
-	ret = start_monitoring(applications);
+	ret = init_monitoring();
 	if (ret < 0) {
-		log_fprint(log_file, "ERROR: unable to start monitoring\n");
+		log_fprint(log_file, "ERROR: unable to init monitoring\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -119,6 +119,26 @@ int main(int argc, char** argv)
 			}
 								
 			break;
+		case CATPC_ADD_APP_TO_MONITOR:
+			log_fprint(log_file, "INFO: message received: CATPC_ADD_APP_TO_MONITOR\n");
+			
+			// receive cmd line string
+			bytes_read = recv(sock, &sz, sizeof(size_t), 0);
+			bytes_read = recv(sock, buf, sz * sizeof(char), 0);
+			cmdline.assign(buf);
+
+			// add application to the map
+			applications[cmdline] = new application{cmdline, monitoring_values(), 0};
+
+			// start monitoring app
+			ret = start_monitoring(cmdline);
+			if (ret < 0) {
+				log_fprint(log_file, "ERROR: unable to start monitoring for app \"%s\"\n", cmdline.c_str());
+				exit(EXIT_FAILURE);
+			}
+			
+			log_fprint(log_file, "Added : %s\n", cmdline.c_str());
+			break;
 
 		case CATPC_GET_ALLOCATION_CONF:
 			// TODO SEND ALLOCATION CONFIGURATION
@@ -133,6 +153,9 @@ int main(int argc, char** argv)
 		// error checking
 		if (bytes_sent < 0) {
 			log_fprint(log_file, "ERROR: send: %s (%d)\n", strerror(errno), errno);
+		}
+		if (bytes_read < 0) {
+			log_fprint(log_file, "ERROR: recv: %s (%d)\n", strerror(errno), errno);
 		}
 	}
 

@@ -23,10 +23,9 @@ static unsigned sel_process_num = 0;												// Maintains the number of proce
 
 static std::unordered_map<std::string, struct pqos_mon_data*> m_mon_grps; 
 
-int start_monitoring(std::unordered_map<std::string, application*>& applications)
+int init_monitoring()
 {
 	int ret = 0;
-	pid_t pids[256];
 
 	memset(&config, 0, sizeof(config));
 	config.fd_log = 0;
@@ -52,16 +51,21 @@ int start_monitoring(std::unordered_map<std::string, application*>& applications
 									 PQOS_PERF_EVENT_LLC_MISS |
 									 PQOS_PERF_EVENT_IPC |
 									 PQOS_PERF_EVENT_LLC_REF);
-	
-	for (std::pair<std::string, application*> element : applications) {
-		sel_process_num = get_pids_by_cmdline(pids, element.first.c_str());
-		m_mon_grps[element.first] = new pqos_mon_data();
-		ret = pqos_mon_start_pids(sel_process_num, pids, sel_events, NULL,
-											m_mon_grps[element.first]);
-		if (ret != PQOS_RETVAL_OK) {
-			return -1;
-			// continue;
-		}
+
+	return 0;
+}
+
+int start_monitoring(const std::string& cmdline)
+{
+	pid_t pids[256];
+	int ret;
+
+	sel_process_num = get_pids_by_cmdline(pids, cmdline.c_str());
+	m_mon_grps[cmdline] = new pqos_mon_data();
+	ret = pqos_mon_start_pids(sel_process_num, pids, sel_events, NULL,
+										m_mon_grps[cmdline]);
+	if (ret != PQOS_RETVAL_OK) {
+		return -1;
 	}
 
 	return 0;
@@ -74,7 +78,7 @@ int poll_monitoring_data(std::unordered_map<std::string, application*>& applicat
 		ret = pqos_mon_poll(&m_mon_grps[element.first], 1);
 
 		if (ret != PQOS_RETVAL_OK) {
-			//applications.erase(element.first);
+			// continue;
 			return -1 * ret;
 		}
 

@@ -46,17 +46,26 @@ struct application {
 		: cmdline{cl}, values{v}, CLOS_id{cid} {}
 };
 
+
 /**
- * @brief Starts monitoring on selected PIDs
+ * @brief Init monitoring environment
+ * 
+ * @retval 0 OK
+ * @retval -1 error
+ */
+int init_monitoring();
+
+/**
+ * @brief Starts monitoring on app launched by a command line
  *
- * @param [in] applications application map list
+ * @param [in] cmdline application commandline
  * 
  * @return Operation status
  * @retval 0 OK
  * @retval -1 error
  */
 
-int start_monitoring(std::unordered_map<std::string, application*>&);
+int start_monitoring(const std::string&);
 
 /**
  * @brief Reads monitoring data

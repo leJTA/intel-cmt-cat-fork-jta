@@ -143,6 +143,14 @@ void connection_handler(connection_t* conn)
 	size_t sz, len;
 	char buf[512];
 
+	msg = CATPC_ADD_APP_TO_MONITOR;
+	if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
+		std::string cl{ "../run_base_ref_gnu_mpi.0009/hpgmgfv_base.gnu_mpi59300" };
+		len = cl.size();
+		send(conn->sock, &len, sizeof(size_t), 0);
+		send(conn->sock, cl.c_str(), len * sizeof(char), 0);
+	}
+
 	msg = CATPC_GET_MONITORING_VALUES;
 	
 	while ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
