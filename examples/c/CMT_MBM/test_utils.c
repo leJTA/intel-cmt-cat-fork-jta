@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "catpc_utils.h"
+#include "catpc_utils.hpp"
 
 int main(int argc, char** argv)
 {

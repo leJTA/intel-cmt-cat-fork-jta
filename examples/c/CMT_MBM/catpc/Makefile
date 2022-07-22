@@ -1,23 +1,22 @@
-CC = gcc
+CC = g++
 LIBDIR = ../../../../lib
-CFLAGS = -I $(LIBDIR) -I . -pthread -Wall -Wextra -Wstrict-prototypes -Wmissing-prototypes \
-	-Wmissing-declarations -Wold-style-definition -Wpointer-arith \
-	-Wcast-qual -Wundef -Wwrite-strings \
+CFLAGS = -I $(LIBDIR) -I . -lpthread -g3 -O2 -std=c++11 -Wall -Wextra \
+	-Wmissing-declarations -Wpointer-arith -Wcast-qual -Wundef -Wwrite-strings \
 	-Wformat -Wformat-security -fstack-protector -fPIE -D_FORTIFY_SOURCE=2 \
-	-Wunreachable-code -Wsign-compare -Wno-endif-labels \
-	-g3 -O2
-LDFLAGS=-L$(LIBDIR) -pie -z noexecstack -z relro -z now
+	-Wunreachable-code -Wsign-compare -Wno-endif-labels
+
+LDFLAGS = -L$(LIBDIR) -pie -z noexecstack -z relro -z now
 LDLIBS = -lpthread -lpqos
 
-SRCS = catpc_utils.c catpc_allocator.c catpc_monitor.c
-OBJS = $(SRCS:.c=.o)
+SRCS = catpc_utils.cpp catpc_allocator.cpp catpc_monitor.cpp
+OBJS = $(SRCS:.cpp=.o)
 
 MASTER = master_daemon
 SLAVE = slave_daemon
 
 all : $(MASTER) $(SLAVE)
 
-%.o: %.c
+%.o: %.cpp
 	$(CC) -o $@ -c $< $(CFLAGS)
 
 dump:

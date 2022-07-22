@@ -7,13 +7,15 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <errno.h>
+#include <vector>
 
-#include "catpc_utils.h"
-#include "catpc_monitor.h"
+#include "catpc_utils.hpp"
+#include "catpc_monitor.hpp"
 
 #define SERVER_PORT 10000
 
 FILE* log_file = NULL;
+std::unordered_map<std::string, application*> applications;
 
 int main(int argc, char** argv)
 {
@@ -59,8 +61,8 @@ int main(int argc, char** argv)
 	int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	int bytes_read = 0, bytes_sent = 0;
 	enum catpc_message msg;
-	struct monitoring_values_tab* mvalues_tab = NULL;
-	int ret;
+	int ret = 0;
+	size_t sz = 0;
 
 	log_file = fopen("/var/log/catpc.slave.log", "w");
 	if (log_file == NULL) {
@@ -68,7 +70,9 @@ int main(int argc, char** argv)
 	}
 
 	// Start Monitoring
-	ret = start_monitoring();
+	std::string cl{ "../run_base_ref_gnu_mpi.0009/hpgmgfv_base.gnu_mpi59300" };
+	applications[cl] = new application{.cmdline = cl, .values = monitoring_values(), .CLOS_id = 0};
+	ret = start_monitoring(applications);
 	if (ret < 0) {
 		log_fprint(log_file, "ERROR: unable to start monitoring\n");
 		exit(EXIT_FAILURE);
@@ -86,12 +90,9 @@ int main(int argc, char** argv)
 	server_addr.sin_port = htons(SERVER_PORT);
 	
 	if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-		log_fprint(log_file, "ERROR: connection to server_addr failed\n");
+		log_fprint(log_file, "ERROR: connection to %s failed\n", inet_ntoa(server_addr.sin_addr));
 		exit(EXIT_FAILURE);
 	}
-
-	// Initialize monitoring value tab pointer
-	mvalues_tab = (struct monitoring_values_tab*)malloc(sizeof(struct monitoring_values_tab));
 
 	// read message from master
 	while ((bytes_read = recv(sock, &msg, sizeof(msg), 0)) > 0) {
@@ -100,15 +101,22 @@ int main(int argc, char** argv)
 			log_fprint(log_file, "INFO: message received: CATPC_GET_MONITORING_VALUES\n");
 			
 			// poll monitoring values
-			ret = poll_monitoring_data(mvalues_tab);
+			ret = poll_monitoring_data(applications);
 			if (ret < 0) {
-				log_fprint(log_file, "ERROR: polling monitoring data\n");
+				log_fprint(log_file, "ERROR: polling monitoring data (%d)\n", ret);
+				goto exit;
 			}
 
 			// send values tab
-			bytes_sent = send(sock, &mvalues_tab->size, sizeof(mvalues_tab->size), 0);
-			bytes_sent = send(sock, mvalues_tab->values, 
-								mvalues_tab->size * sizeof(struct monitoring_values), 0);
+			sz = applications.size();
+			bytes_sent = send(sock, &sz, sizeof(size_t), 0);													// send the number of applications
+			for (std::pair<std::string, application*> element : applications) {
+				sz = element.first.size();																				
+				bytes_sent = send(sock, &sz, sizeof(size_t), 0);												// send the length of the cmdline string
+				bytes_sent = send(sock, element.first.c_str(), sz * sizeof(char), 0);					// send the cmdline string
+				bytes_sent = send(sock, &element.second->values, sizeof(monitoring_values), 0);		// send monitoring values
+				bytes_sent = send(sock, &element.second->CLOS_id, sizeof(ushort), 0);					// send CLOS id
+			}
 								
 			break;
 
@@ -129,18 +137,17 @@ int main(int argc, char** argv)
 	}
 
 	if (bytes_read == 0) {
-		log_fprint(log_file, "INFO: recv: server closed. Exiting...\n");
+		log_fprint(log_file, "INFO: recv: server closed. Terminating...\n");
 	}
 	else {	// bytes_read < 0
 		log_fprint(log_file, "ERROR: recv: %s (%d)\n", strerror(errno), errno);
 	}
 
+exit:
 	// stop monitoring before exit
-	stop_monitoring();
+	stop_monitoring(applications);
 	
 	// cleaning up everything
-	free(mvalues_tab->values);
-	free(mvalues_tab);
 	fclose(log_file);
 	close(sock);
 

@@ -513,7 +513,7 @@ tid_exists(const pid_t tid, const unsigned tid_nr, const pid_t *tid_map)
 static int
 tid_add(const pid_t tid, unsigned *tid_nr, pid_t **tid_map)
 {
-        pid_t *tids;
+        pid_t *tids = NULL;
 
         if (tid_exists(tid, *tid_nr, *tid_map))
                 return PQOS_RETVAL_OK;

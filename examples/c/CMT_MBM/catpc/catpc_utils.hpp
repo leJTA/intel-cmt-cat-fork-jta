@@ -1,5 +1,5 @@
-#ifndef __CATPC_UTILS_H__
-#define __CATPC_UTILS_H__
+#ifndef __CATPC_UTILS_HPP__
+#define __CATPC_UTILS_HPP__
 
 #include <stdint.h>
 #include <stdio.h>
@@ -10,7 +10,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "catpc_monitor.h"
+#include "catpc_monitor.hpp"
 
 /**
  * @brief CATPC message values
@@ -52,7 +52,6 @@ struct process_tree* get_process_tree(pid_t ppid);
  */
 int get_num_pids(struct process_tree* tree);
 
-
 /**
  * @brief Store all the pids composing the tree in the list
  * 
@@ -63,6 +62,15 @@ int get_num_pids(struct process_tree* tree);
  * @return the current index
  */
 int tree_to_list(struct process_tree* tree, pid_t* pids, int index);
+
+/**
+ * @brief Retrieve process ids created from a command line
+ * 
+ * @param [in] cmdline full command line with spaces removed
+ * @param [out] pids array of pids
+ * @return number of pids
+ */
+int get_pids_by_cmdline(pid_t* pids, const char* cmdline);
 
 /**
  * @brief logging function

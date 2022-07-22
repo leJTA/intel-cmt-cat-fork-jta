@@ -1,11 +1,11 @@
-#include "catpc_utils.h"
+#include "catpc_utils.hpp"
 
 #include <dirent.h>
 #include <stdarg.h>
 #include <time.h>
 #include <errno.h>
 #include <ctype.h>
-
+#include <stdio.h>
 
 /**
  * @brief filter for scandir.
@@ -79,8 +79,6 @@ static struct process_tree* _get_process_tree(pid_t ppid, int allow_task_lookup)
 		}
 	}
 
-
-
 	// Get all children
 	sprintf(buf, "/proc/%d/task/%d/children", (int)tree->pid, (int)tree->pid);
 	file = fopen(buf, "r+");
@@ -142,6 +140,46 @@ int tree_to_list(struct process_tree* tree, pid_t* pids, int index)
 	}
 
 	return i;
+}
+
+
+int get_pids_by_cmdline(pid_t* pids, const char* cmdline)
+{
+	char filepath[32];
+	char buf[1024];
+	char c = '\0';
+	int i = 0, sz = 0;
+	pid_t pid;
+	FILE* fp = popen("/bin/ps -A -o pid=", "r");	// list of all pids
+	FILE* cmdfile = NULL;
+	
+	if (fp == NULL) {
+		return 0;
+	}
+
+	while (fscanf(fp, "%d", &pid) != EOF) {
+		sprintf(filepath, "/proc/%d/cmdline", pid);
+		cmdfile = fopen(filepath, "r");
+		
+		if (cmdfile == NULL)
+			continue;
+
+		// read command of the process
+		i = 0;
+		while ( fscanf(cmdfile, "%c", &c) != EOF) {
+			if (c == '\0') {
+				continue;	
+			}
+			buf[i++] = c;
+		}
+		buf[i] = '\0';
+
+		if (strcmp(buf, cmdline) == 0) {
+			pids[sz++] = pid;
+		}
+	}
+
+	return sz;
 }
 
 void log_fprint(FILE* fp, const char* fmt, ...)
