@@ -55,7 +55,7 @@ unsigned client_count = 0;
 std::vector<connection_t*> connections;
 sig_atomic_t terminate = 0;
 
-std::unordered_map<std::string, application*> applications;
+std::unordered_map<int, std::unordered_map<std::string, application*>> sock_to_application;
 std::unordered_map<int, notification_t> sock_to_notification;
 
 int main(int argc, char** argv)
@@ -189,7 +189,8 @@ void connection_handler(connection_t* conn)
 
 		switch (msg)
 		{
-		case CATPC_ADD_APP_TO_MONITOR || CATPC_REMOVE_APP_TO_MONITOR : 
+		case CATPC_REMOVE_APP_TO_MONITOR:
+		case CATPC_ADD_APP_TO_MONITOR : 
 			if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
 				len = cmdline.size();
 				send(conn->sock, &len, sizeof(size_t), 0);
@@ -215,10 +216,11 @@ void connection_handler(connection_t* conn)
 					bytes_read = recv(conn->sock, &app.CLOS_id, sizeof(ushort), 0);
 
 					// store data
-					applications[app.cmdline] = new application{app};
+					sock_to_application[conn->sock][app.cmdline] = new application{app};
 
-					log_fprint(log_file, "%s : MR[%.1fkB] = %1.4f\n", app.cmdline.c_str(), applications[app.cmdline]->values.llc / 1024.0, 
-						(double)applications[app.cmdline]->values.llc_misses / applications[app.cmdline]->values.llc_references);
+					log_fprint(log_file, "%s : MR[%.1fkB] = %1.4f\n", app.cmdline.c_str(), 
+						sock_to_application[conn->sock][app.cmdline]->values.llc / 1024.0, 
+						(double)sock_to_application[conn->sock][app.cmdline]->values.llc_misses / sock_to_application[conn->sock][app.cmdline]->values.llc_references);
 				}
 			}
 			break;
