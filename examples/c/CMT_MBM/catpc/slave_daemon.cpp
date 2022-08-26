@@ -90,7 +90,7 @@ int main(int argc, char** argv)
 	server_addr.sin_port = htons(SERVER_PORT);
 	
 	if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-		log_fprint(log_file, "ERROR: connection to %s failed\n", inet_ntoa(server_addr.sin_addr));
+		log_fprint(log_file, "ERROR: connection to %s failed: %s (%d)\n", inet_ntoa(server_addr.sin_addr), strerror(errno), errno);
 		exit(EXIT_FAILURE);
 	}
 

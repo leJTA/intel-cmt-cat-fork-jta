@@ -168,7 +168,8 @@ int get_pids_by_cmdline(pid_t* pids, const char* cmdline)
 		i = 0;
 		while ( fscanf(cmdfile, "%c", &c) != EOF) {
 			if (c == '\0') {
-				continue;	
+				continue;
+				//c = ' ';	
 			}
 			buf[i++] = c;
 		}

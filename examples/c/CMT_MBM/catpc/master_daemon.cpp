@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/socket.h> 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -9,6 +11,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <mutex>
 #include <unordered_map>
 
 #include "catpc_utils.hpp"
@@ -24,8 +27,27 @@ struct connection_t {
 	socklen_t addr_len;
 };
 
+struct notification_t {
+	std::mutex mtx;
+
+	bool app_added;				// new app flag
+	bool app_removed;				// removed app flag
+	std::string cmdline;			// command line of the app
+
+	notification_t() : app_added{false}, app_removed{false}, cmdline{""}
+	{}
+
+	notification_t(const notification_t&& other)
+	{
+		this->app_added = other.app_added;
+		this->app_removed = other.app_removed;
+		this->cmdline = other.cmdline;
+	}
+};
+
 void connection_handler(connection_t*);
 void termination_handler(int signum);
+void fifo_monitoring();
 
 FILE* log_file = NULL;
 int sock;
@@ -34,7 +56,7 @@ std::vector<connection_t*> connections;
 sig_atomic_t terminate = 0;
 
 std::unordered_map<std::string, application*> applications;
-
+std::unordered_map<int, notification_t> sock_to_notification;
 
 int main(int argc, char** argv)
 {
@@ -100,6 +122,9 @@ int main(int argc, char** argv)
 		log_fprint(log_file, "ERROR: listen failed: %s (%d)\n", strerror(errno), errno);
 	}
 	
+	// start fifo monitoring thread
+	std::thread fifo_thread(fifo_monitoring);
+
 	// Loop to accept incomming connections
 	while (!terminate) {
 		connections.push_back(new connection_t());
@@ -109,6 +134,9 @@ int main(int argc, char** argv)
 			continue;
 		}
 		client_count++;
+
+		// insert corresponding and mutex
+		sock_to_notification.insert(std::make_pair(connections.back()->sock, notification_t()));
 		
 		log_fprint(log_file, "INFO: slave connected: %s\n", inet_ntoa(connections.back()->address.sin_addr));
 
@@ -124,6 +152,9 @@ int main(int argc, char** argv)
 		delete conn;
 	}
 
+	if (fifo_thread.joinable()) {
+		fifo_thread.join();
+	}
 	for (std::thread& thd : threads) {
 		if (thd.joinable()) {
 			thd.join();
@@ -137,57 +168,85 @@ int main(int argc, char** argv)
 
 void connection_handler(connection_t* conn)
 {
-	int bytes_read, bytes_sent;
-	enum catpc_message msg;
+	notification_t& notif = sock_to_notification[conn->sock];
+	int bytes_read = 0, bytes_sent = 0;
+	enum catpc_message msg = CATPC_GET_MONITORING_VALUES;
+	std::string cmdline;
 	application app;
 	size_t sz, len;
 	char buf[512];
 
-	msg = CATPC_ADD_APP_TO_MONITOR;
-	if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
-		std::string cl{ "../run_base_ref_gnu_mpi.0009/hpgmgfv_base.gnu_mpi59300" };
-		len = cl.size();
-		send(conn->sock, &len, sizeof(size_t), 0);
-		send(conn->sock, cl.c_str(), len * sizeof(char), 0);
-	}
-
-	msg = CATPC_GET_MONITORING_VALUES;
-	
-	while ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
-		// Read the number of applications
-		bytes_read = recv(conn->sock, &sz, sizeof(size_t), 0);
-
-		for (size_t i = 0; i < sz && bytes_read > 0; ++i) {
-			// Read the cmdline (size then chars)
-			bytes_read = recv(conn->sock, &len, sizeof(size_t), 0);
-			bytes_read = recv(conn->sock, buf, len * sizeof(char), 0);
-			app.cmdline.assign(buf);
-
-			// Read monitoring data
-			bytes_read = recv(conn->sock, &app.values, sizeof(monitoring_values), 0);
-
-			// Read CLOS id
-			bytes_read = recv(conn->sock, &app.CLOS_id, sizeof(ushort), 0);
-
-			// store data
-			applications[app.cmdline] = new application{app};
-
-			log_fprint(log_file, "%s : MR[%.1fkB] = %1.4f\n", app.cmdline.c_str(), applications[app.cmdline]->values.llc / 1024.0, 
-				(double)applications[app.cmdline]->values.llc_misses / applications[app.cmdline]->values.llc_references);
+	while (true) {
+		{
+			// Read the notification object to know if there is a new app or if an app has been removed/terminated
+			std::lock_guard<std::mutex> lk(notif.mtx);
+			if (notif.app_added) {
+				notif.app_added = false;	// reset the flag
+				cmdline = notif.cmdline;
+				msg = CATPC_ADD_APP_TO_MONITOR;
+			}
 		}
-		usleep(PERIOD);
+
+		switch (msg)
+		{
+		case CATPC_ADD_APP_TO_MONITOR || CATPC_REMOVE_APP_TO_MONITOR : 
+			if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
+				len = cmdline.size();
+				send(conn->sock, &len, sizeof(size_t), 0);
+				send(conn->sock, cmdline.c_str(), len * sizeof(char), 0);
+			}
+			break;
 		
+		case CATPC_GET_MONITORING_VALUES :
+			if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
+				// Read the number of applications
+				bytes_read = recv(conn->sock, &sz, sizeof(size_t), 0);
+
+				for (size_t i = 0; i < sz && bytes_read > 0; ++i) {
+					// Read the cmdline (size then chars)
+					bytes_read = recv(conn->sock, &len, sizeof(size_t), 0);
+					bytes_read = recv(conn->sock, buf, len * sizeof(char), 0);
+					app.cmdline.assign(buf);
+
+					// Read monitoring data
+					bytes_read = recv(conn->sock, &app.values, sizeof(monitoring_values), 0);
+
+					// Read CLOS id
+					bytes_read = recv(conn->sock, &app.CLOS_id, sizeof(ushort), 0);
+
+					// store data
+					applications[app.cmdline] = new application{app};
+
+					log_fprint(log_file, "%s : MR[%.1fkB] = %1.4f\n", app.cmdline.c_str(), applications[app.cmdline]->values.llc / 1024.0, 
+						(double)applications[app.cmdline]->values.llc_misses / applications[app.cmdline]->values.llc_references);
+				}
+			}
+			break;
+
+		default:
+				log_fprint(log_file, "unknow message value: %d\n", msg);
+
+		}
+		
+		// Error handling
 		if (bytes_read < 0) {
 			log_fprint(log_file, "ERROR: recv from %s: %s (%d)\n", inet_ntoa(conn->address.sin_addr), strerror(errno), errno);
+			break;
 		}
+
+		if (bytes_sent == 0) {
+			log_fprint(log_file, "INFO: recv: slave disconnected %s\n", inet_ntoa(conn->address.sin_addr));
+			break;
+		}
+		else if (bytes_sent < 0) {	// bytes_sent < 0
+			log_fprint(log_file, "ERROR: send to %s: %s (%d)\n", inet_ntoa(conn->address.sin_addr), strerror(errno), errno);
+			break;
+		}
+
+		msg = CATPC_GET_MONITORING_VALUES;	// set to the default message value
+		usleep(PERIOD);
 	}
 
-	if (bytes_sent == 0) {
-		log_fprint(log_file, "INFO: recv: slave disconnected %s\n", inet_ntoa(conn->address.sin_addr));
-	}
-	else {	// bytes_sent < 0
-		log_fprint(log_file, "ERROR: send to %s: %s (%d)\n", inet_ntoa(conn->address.sin_addr), strerror(errno), errno);
-	}
 
 	close(conn->sock);
 }
@@ -197,5 +256,32 @@ void termination_handler(int signum)
 	if (signum == SIGTERM) {
 		terminate = 1;
 		close(sock);
+	}
+}
+
+void fifo_monitoring()
+{
+	log_fprint(log_file, "INFO: starting fifo monitoring\n");
+	int fd;
+	const char* catpc_fifo = "/tmp/catpc.fifo";
+	char buf[512];
+
+	mkfifo(catpc_fifo, 0666);
+
+	while (!terminate) {
+		fd = open(catpc_fifo, O_RDONLY);
+		if (read(fd, buf, sizeof(buf)) < 0) {
+			log_fprint(log_file, "ERROR: read failed: %s(%d)\n", strerror(errno), errno);	
+		}
+		log_fprint(log_file, "INFO: app launched: %s\n", buf);
+
+		for (std::pair<const int, notification_t>& it : sock_to_notification) {
+			{
+				std::lock_guard<std::mutex> lk(it.second.mtx);
+				it.second.app_added = true;
+				it.second.cmdline.assign(buf);
+			}
+		}
+		close(fd);
 	}
 }

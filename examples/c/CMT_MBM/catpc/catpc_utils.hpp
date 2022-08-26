@@ -20,7 +20,8 @@ enum catpc_message {
 	CATPC_GET_MONITORING_VALUES = 0, /**< retrieve monitoring values */ 
 	CATPC_GET_ALLOCATION_CONF = 1,   /**< retrieve allocation configuration */ 
 	CATPC_PERFORM_ALLOCATION = 2,    /**< perform allocation */
-	CATPC_ADD_APP_TO_MONITOR = 3		/**< add application to monitor */
+	CATPC_ADD_APP_TO_MONITOR = 3,		/**< add application to monitor */
+	CATPC_REMOVE_APP_TO_MONITOR = 4		/**< remove application to monitor */
 };
 
 struct process_tree {
