@@ -16,6 +16,7 @@
 
 #include "catpc_utils.hpp"
 #include "catpc_monitor.hpp"
+#include "catpc_allocator.hpp"
 
 #define MAX_CLIENTS 16			// Maximum number of slaves managed by CATPC master
 #define SERVER_PORT 10000
@@ -57,6 +58,7 @@ sig_atomic_t terminate = 0;
 
 std::unordered_map<int, std::unordered_map<std::string, application*>> sock_to_application;
 std::unordered_map<int, notification_t> sock_to_notification;
+std::unordered_map<int, std::vector<llc_ca>> sock_to_llcs;
 
 int main(int argc, char** argv)
 {
@@ -176,6 +178,8 @@ void connection_handler(connection_t* conn)
 	size_t sz, len;
 	char buf[512];
 
+	bool verified = false;
+
 	while (true) {
 		{
 			// Read the notification object to know if there is a new app or if an app has been removed/terminated
@@ -184,6 +188,10 @@ void connection_handler(connection_t* conn)
 				notif.app_added = false;	// reset the flag
 				cmdline = notif.cmdline;
 				msg = CATPC_ADD_APP_TO_MONITOR;
+			}  
+			else if (!verified) {
+				verified = true;
+				msg = CATPC_GET_ALLOCATION_CONF;
 			}
 		}
 
@@ -198,7 +206,7 @@ void connection_handler(connection_t* conn)
 			}
 			break;
 		
-		case CATPC_GET_MONITORING_VALUES :
+		case CATPC_GET_MONITORING_VALUES:
 			if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
 				// Read the number of applications
 				bytes_read = recv(conn->sock, &sz, sizeof(size_t), 0);
@@ -224,6 +232,37 @@ void connection_handler(connection_t* conn)
 				}
 			}
 			break;
+
+		case CATPC_GET_ALLOCATION_CONF:
+		if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
+			sock_to_llcs[conn->sock].clear();								// Clear the llc_ca list
+			bytes_read = recv(conn->sock, &sz, sizeof(size_t), 0);	// read the number of llc/sockets
+			for (size_t i = 0; i < sz; ++i) {
+				sock_to_llcs[conn->sock].push_back(llc_ca());
+				llc_ca& llc = sock_to_llcs[conn->sock].back();			// reference to the new element for better readability
+				
+				bytes_read = recv(conn->sock, &llc.id, sizeof(int), 0);
+				bytes_read = recv(conn->sock, &llc.clos_count, sizeof(unsigned), 0);
+
+				for (unsigned j = 0; j < llc.clos_count; ++j) {
+					llc.clos_list.push_back(CLOS());
+					bytes_read = recv(conn->sock, &llc.clos_list.back(), sizeof(CLOS), 0);
+				}
+			}
+		}
+
+		// Begin big print
+		for (llc_ca llc : sock_to_llcs[conn->sock]){
+			log_fprint(log_file, "INFO: L3CA COS definitions for Socket %u:\n", llc.id);
+			for (unsigned n = 0; n < llc.clos_count; n++) {
+						log_fprint(log_file, "	L3CA COS%u => MASK 0x%lx\n",
+								llc.clos_list[n].id,
+								llc.clos_list[n].mask);
+			}
+		}
+		// End big print
+
+		break;
 
 		default:
 				log_fprint(log_file, "unknow message value: %d\n", msg);
@@ -273,9 +312,10 @@ void fifo_monitoring()
 	while (!terminate) {
 		fd = open(catpc_fifo, O_RDONLY);
 		if (read(fd, buf, sizeof(buf)) < 0) {
-			log_fprint(log_file, "ERROR: read failed: %s(%d)\n", strerror(errno), errno);	
+			log_fprint(log_file, "ERROR: read failed: %s(%d)\n", strerror(errno), errno);
+			return;
 		}
-		log_fprint(log_file, "INFO: app launched: %s\n", buf);
+		log_fprint(log_file, "INFO: app launched: \"%s\"\n", buf);
 
 		for (std::pair<const int, notification_t>& it : sock_to_notification) {
 			{

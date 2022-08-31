@@ -11,13 +11,12 @@
 #include <stdint.h>
 #include <assert.h>
 
-
 #define PQOS_MAX_APPS 256
 
-static struct pqos_config config;
-static const struct pqos_cpuinfo *p_cpu = NULL;
-static const struct pqos_cap *p_cap = NULL;
-static const struct pqos_capability *cap_mon = NULL;
+struct pqos_config config;
+const struct pqos_cpuinfo *p_cpu = NULL;
+const struct pqos_cap *p_cap = NULL;
+const struct pqos_capability *cap_mon = NULL;
 static enum pqos_mon_event sel_events = (enum pqos_mon_event)0;			// Monitored PQOS events
 static unsigned sel_process_num = 0;												// Maintains the number of process id's we want to track
 
@@ -100,4 +99,15 @@ void stop_monitoring(std::unordered_map<std::string, application*>& applications
 		delete m_mon_grps[element.first];
 	}
 	pqos_fini();
+}
+
+system_info get_system_info()
+{
+	system_info si;
+	si.config = config;
+	si.p_cpu = p_cpu;
+	si.p_cap = p_cap;
+	si.cap_mon = cap_mon;
+
+	return si;
 }

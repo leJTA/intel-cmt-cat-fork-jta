@@ -11,6 +11,7 @@
 
 #include "catpc_utils.hpp"
 #include "catpc_monitor.hpp"
+#include "catpc_allocator.hpp"
 
 #define SERVER_PORT 10000
 
@@ -78,6 +79,13 @@ int main(int argc, char** argv)
 		exit(EXIT_FAILURE);
 	}
 
+	// get allocation configuration
+	std::vector<llc_ca> llcs = get_allocation_config();
+	if (llcs.empty()) {
+		log_fprint(log_file, "ERROR: get_allocation_config failed\n");
+		exit(EXIT_FAILURE);
+	}
+
 	// get master info by name
 	host_info = gethostbyname(master_name);
 	if (host_info == NULL) {
@@ -140,8 +148,21 @@ int main(int argc, char** argv)
 			log_fprint(log_file, "Added : %s\n", cmdline.c_str());
 			break;
 
+		case CATPC_REMOVE_APP_TO_MONITOR:
+			//log_fprint(log_file, );
+
 		case CATPC_GET_ALLOCATION_CONF:
-			// TODO SEND ALLOCATION CONFIGURATION
+			log_fprint(log_file, "INFO: message received: CATPC_GET_ALLOCATION_CONF\n");
+			sz = llcs.size();
+			bytes_sent = send(sock, &sz, sizeof(size_t), 0);
+			for (llc_ca llc : llcs) {
+				bytes_sent = send(sock, &llc.id, sizeof(int), 0);
+				bytes_sent = send(sock, &llc.clos_count, sizeof(unsigned), 0);
+				for (CLOS clos : llc.clos_list) {
+					bytes_sent = send(sock, &clos, sizeof(CLOS), 0);
+					//log_fprint(log_file, "INFO: socket %d COS%d\n", llc.id, clos.id);
+				}
+			}
 			break;
 		case CATPC_PERFORM_ALLOCATION:
 			// TODO PERFORM ALLOCATION

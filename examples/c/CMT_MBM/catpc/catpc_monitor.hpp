@@ -13,6 +13,7 @@
 #include <unordered_map>
 #include <map>
 
+#include "pqos.h"
 
 /**
  * The structure to store monitoring data for all of the events
@@ -46,6 +47,16 @@ struct application {
 		: cmdline{cl}, values{v}, CLOS_id{cid} {}
 };
 
+/**
+ * @brief System information about PQOS 
+ * 
+ */
+struct system_info {
+	struct pqos_config config;
+	const struct pqos_cpuinfo *p_cpu = NULL;
+	const struct pqos_cap *p_cap = NULL;
+	const struct pqos_capability *cap_mon = NULL;
+};
 
 /**
  * @brief Init monitoring environment
@@ -84,5 +95,13 @@ int poll_monitoring_data(std::unordered_map<std::string, application*>&);
  * 
  */
 void stop_monitoring(std::unordered_map<std::string, application*>&);
+
+/**
+ * @brief Get the system info about PQOS
+ * 
+ * @return system_info 
+ */
+system_info get_system_info();
+
 
 #endif

@@ -150,14 +150,14 @@ set_allocation_class(unsigned l3cat_id_count, const unsigned *l3cat_ids)
  * @return error value on failure
  */
 static int
-print_allocation_config(const unsigned l3cat_id_count,
-                        const unsigned *l3cat_ids)
+print_allocation_config(const unsigned l3cat_id_count,	// --> socket count
+                        const unsigned *l3cat_ids)			// --> socket ids
 {
         int ret = PQOS_RETVAL_OK;
         unsigned i;
 
         for (i = 0; i < l3cat_id_count; i++) {
-                struct pqos_l3ca tab[PQOS_MAX_L3CA_COS];
+                struct pqos_l3ca tab[PQOS_MAX_L3CA_COS];	// --> array of "CLOS" data
                 unsigned num = 0;
 
                 ret = pqos_l3ca_get(l3cat_ids[i], PQOS_MAX_L3CA_COS, &num, tab);
@@ -191,6 +191,7 @@ main(int argc, char *argv[])
         memset(&cfg, 0, sizeof(cfg));
         cfg.fd_log = STDOUT_FILENO;
         cfg.verbose = 0;
+		  cfg.interface = PQOS_INTER_OS;
         /* PQoS Initialization - Check and initialize CAT and CMT capability */
         ret = pqos_init(&cfg);
         if (ret != PQOS_RETVAL_OK) {
