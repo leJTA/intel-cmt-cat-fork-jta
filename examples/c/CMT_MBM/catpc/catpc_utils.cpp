@@ -154,7 +154,7 @@ int get_pids_by_cmdline(pid_t* pids, const char* cmdline)
 	FILE* cmdfile = NULL;
 	
 	if (fp == NULL) {
-		return 0;
+		return -1;
 	}
 
 	while (fscanf(fp, "%d", &pid) != EOF) {
@@ -178,7 +178,10 @@ int get_pids_by_cmdline(pid_t* pids, const char* cmdline)
 		if (strcmp(buf, cmdline) == 0) {
 			pids[sz++] = pid;
 		}
+		fclose(cmdfile);
 	}
+
+	pclose(fp);
 
 	return sz;
 }

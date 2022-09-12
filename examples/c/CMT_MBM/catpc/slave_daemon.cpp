@@ -16,7 +16,7 @@
 #define SERVER_PORT 10000
 
 FILE* log_file = NULL;
-std::unordered_map<std::string, application*> applications;
+std::unordered_map<std::string, catpc_application*> applications;
 
 int main(int argc, char** argv)
 {
@@ -63,6 +63,7 @@ int main(int argc, char** argv)
 	int bytes_read = 0, bytes_sent = 0;
 	enum catpc_message msg;
 	std::string cmdline;
+	unsigned int CLOS_id;
 	size_t sz;
 	int ret = 0;
 	char buf[512];
@@ -118,12 +119,12 @@ int main(int argc, char** argv)
 			// send values tab
 			sz = applications.size();
 			bytes_sent = send(sock, &sz, sizeof(size_t), 0);													// send the number of applications
-			for (std::pair<std::string, application*> element : applications) {
+			for (std::pair<std::string, catpc_application*> element : applications) {
 				sz = element.first.size();																				
 				bytes_sent = send(sock, &sz, sizeof(size_t), 0);												// send the length of the cmdline string
 				bytes_sent = send(sock, element.first.c_str(), sz * sizeof(char), 0);					// send the cmdline string
-				bytes_sent = send(sock, &element.second->values, sizeof(monitoring_values), 0);		// send monitoring values
-				bytes_sent = send(sock, &element.second->CLOS_id, sizeof(ushort), 0);					// send CLOS id
+				bytes_sent = send(sock, &element.second->values, sizeof(catpc_monitoring_values), 0);		// send monitoring values
+				bytes_sent = send(sock, &element.second->CLOS_id, sizeof(unsigned int), 0);					// send CLOS id
 			}
 								
 			break;
@@ -136,20 +137,21 @@ int main(int argc, char** argv)
 			cmdline.assign(buf);
 
 			// add application to the map
-			applications[cmdline] = new application{cmdline, monitoring_values(), 0};
+			applications[cmdline] = new catpc_application{cmdline, catpc_monitoring_values(), 0};
 
-			// start monitoring app
+			// start monitoring on app launched by the command line
 			ret = start_monitoring(cmdline);
 			if (ret < 0) {
-				log_fprint(log_file, "ERROR: unable to start monitoring for app \"%s\"\n", cmdline.c_str());
+				log_fprint(log_file, "ERROR: unable to start monitoring on app \"%s\"\n", cmdline.c_str());
 				exit(EXIT_FAILURE);
 			}
 			
-			log_fprint(log_file, "Added : %s\n", cmdline.c_str());
+			log_fprint(log_file, "INFO: app added : %s\n", cmdline.c_str());
 			break;
 
 		case CATPC_REMOVE_APP_TO_MONITOR:
 			//log_fprint(log_file, );
+			break;
 
 		case CATPC_GET_ALLOCATION_CONF:
 			log_fprint(log_file, "INFO: message received: CATPC_GET_ALLOCATION_CONF\n");
@@ -160,12 +162,31 @@ int main(int argc, char** argv)
 				bytes_sent = send(sock, &llc.clos_count, sizeof(unsigned), 0);
 				for (CLOS clos : llc.clos_list) {
 					bytes_sent = send(sock, &clos, sizeof(CLOS), 0);
-					//log_fprint(log_file, "INFO: socket %d COS%d\n", llc.id, clos.id);
 				}
 			}
 			break;
 		case CATPC_PERFORM_ALLOCATION:
-			// TODO PERFORM ALLOCATION
+			log_fprint(log_file, "INFO: message received: CATPC_PERFORM_ALLOCATION\n");
+			// read as many times as there are applications
+			for (unsigned i = 0; i < applications.size(); ++i) {
+				// receive cmd line string
+				bytes_read = recv(sock, &sz, sizeof(size_t), 0);
+				bytes_read = recv(sock, buf, sz * sizeof(char), 0);
+				bytes_read = recv(sock, &CLOS_id, sizeof(unsigned int), 0);
+				log_fprint(log_file, "INFO: %s: COS%u -> COS%u\n", buf, applications[cmdline]->CLOS_id, CLOS_id);
+				cmdline.assign(buf);
+				applications[cmdline]->CLOS_id = CLOS_id;
+			}
+
+			// perform allocation
+			ret = perform_allocation(applications);
+			if (ret < 0) {
+				log_fprint(log_file, "ERROR: perform_allocation failed (%d)\n", ret);
+			}
+			else {
+				log_fprint(log_file, "INFO: perform_allocation success\n");
+			}
+
 			break;
 		default:
 			log_fprint(log_file, "ERROR: unknow message value: %d\n", msg);
@@ -181,7 +202,7 @@ int main(int argc, char** argv)
 	}
 
 	if (bytes_read == 0) {
-		log_fprint(log_file, "INFO: recv: server closed. Terminating...\n");
+		log_fprint(log_file, "INFO: recv: server closed.\n");
 	}
 	else {	// bytes_read < 0
 		log_fprint(log_file, "ERROR: recv: %s (%d)\n", strerror(errno), errno);
@@ -193,7 +214,9 @@ exit:
 	
 	// cleaning up everything
 	fclose(log_file);
+	
 	close(sock);
 
+	log_fprint(log_file, "INFO: Done.\n");
 	return EXIT_SUCCESS;
 }

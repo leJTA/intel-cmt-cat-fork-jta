@@ -70,10 +70,10 @@ int start_monitoring(const std::string& cmdline)
 	return 0;
 }
 
-int poll_monitoring_data(std::unordered_map<std::string, application*>& applications)
+int poll_monitoring_data(std::unordered_map<std::string, catpc_application*>& applications)
 {
 	unsigned i, ret = PQOS_RETVAL_OK;
-	for (std::pair<std::string, application*> element : applications) {
+	for (std::pair<std::string, catpc_application*> element : applications) {
 		ret = pqos_mon_poll(&m_mon_grps[element.first], 1);
 
 		if (ret != PQOS_RETVAL_OK) {
@@ -92,18 +92,18 @@ int poll_monitoring_data(std::unordered_map<std::string, application*>& applicat
 	return 0;
 }
 
-void stop_monitoring(std::unordered_map<std::string, application*>& applications)
+void stop_monitoring(std::unordered_map<std::string, catpc_application*>& applications)
 {
-	for (std::pair<std::string, application*> element : applications) {
+	for (std::pair<std::string, catpc_application*> element : applications) {
 		pqos_mon_stop(m_mon_grps[element.first]);
 		delete m_mon_grps[element.first];
 	}
 	pqos_fini();
 }
 
-system_info get_system_info()
+catpc_system_info get_system_info()
 {
-	system_info si;
+	catpc_system_info si;
 	si.config = config;
 	si.p_cpu = p_cpu;
 	si.p_cap = p_cap;

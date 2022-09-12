@@ -56,7 +56,7 @@ unsigned client_count = 0;
 std::vector<connection_t*> connections;
 sig_atomic_t terminate = 0;
 
-std::unordered_map<int, std::unordered_map<std::string, application*>> sock_to_application;
+std::unordered_map<int, std::unordered_map<std::string, catpc_application*>> sock_to_application;
 std::unordered_map<int, notification_t> sock_to_notification;
 std::unordered_map<int, std::vector<llc_ca>> sock_to_llcs;
 
@@ -163,7 +163,7 @@ int main(int argc, char** argv)
 		}
 	}
 
-	log_fprint(log_file, "INFO: Terminating...\n");
+	log_fprint(log_file, "INFO: Done.\n");
 	fclose(log_file);
 	return EXIT_SUCCESS;
 }
@@ -174,11 +174,11 @@ void connection_handler(connection_t* conn)
 	int bytes_read = 0, bytes_sent = 0;
 	enum catpc_message msg = CATPC_GET_MONITORING_VALUES;
 	std::string cmdline;
-	application app;
+	catpc_application app;
 	size_t sz, len;
 	char buf[512];
 
-	bool verified = false;
+	int step = 0;
 
 	while (true) {
 		{
@@ -189,10 +189,16 @@ void connection_handler(connection_t* conn)
 				cmdline = notif.cmdline;
 				msg = CATPC_ADD_APP_TO_MONITOR;
 			}  
-			else if (!verified) {
-				verified = true;
+			else if (step == 0) {
 				msg = CATPC_GET_ALLOCATION_CONF;
 			}
+			else if (step % 10 == 0) {
+				msg = CATPC_PERFORM_ALLOCATION;
+				for (auto app : sock_to_application[conn->sock]) {
+					app.second->CLOS_id = 2;
+				}
+			}
+			step++;
 		}
 
 		switch (msg)
@@ -218,13 +224,13 @@ void connection_handler(connection_t* conn)
 					app.cmdline.assign(buf);
 
 					// Read monitoring data
-					bytes_read = recv(conn->sock, &app.values, sizeof(monitoring_values), 0);
+					bytes_read = recv(conn->sock, &app.values, sizeof(catpc_monitoring_values), 0);
 
 					// Read CLOS id
-					bytes_read = recv(conn->sock, &app.CLOS_id, sizeof(ushort), 0);
+					bytes_read = recv(conn->sock, &app.CLOS_id, sizeof(unsigned int), 0);
 
 					// store data
-					sock_to_application[conn->sock][app.cmdline] = new application{app};
+					sock_to_application[conn->sock][app.cmdline] = new catpc_application{app};
 
 					log_fprint(log_file, "%s : MR[%.1fkB] = %1.4f\n", app.cmdline.c_str(), 
 						sock_to_application[conn->sock][app.cmdline]->values.llc / 1024.0, 
@@ -250,18 +256,17 @@ void connection_handler(connection_t* conn)
 				}
 			}
 		}
+		break;
 
-		// Begin big print
-		for (llc_ca llc : sock_to_llcs[conn->sock]){
-			log_fprint(log_file, "INFO: L3CA COS definitions for Socket %u:\n", llc.id);
-			for (unsigned n = 0; n < llc.clos_count; n++) {
-						log_fprint(log_file, "	L3CA COS%u => MASK 0x%lx\n",
-								llc.clos_list[n].id,
-								llc.clos_list[n].mask);
+		case CATPC_PERFORM_ALLOCATION:
+			if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
+				for (std::pair<std::string, catpc_application*> element : sock_to_application[conn->sock]) {
+					len = cmdline.size();
+					send(conn->sock, &len, sizeof(size_t), 0);
+					send(conn->sock, element.first.c_str(), len * sizeof(char), 0);
+					send(conn->sock, &element.second->CLOS_id, sizeof(unsigned int), 0);
+				}
 			}
-		}
-		// End big print
-
 		break;
 
 		default:

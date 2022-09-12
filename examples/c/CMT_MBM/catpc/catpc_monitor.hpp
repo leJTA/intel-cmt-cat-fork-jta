@@ -18,7 +18,7 @@
 /**
  * The structure to store monitoring data for all of the events
  */
-struct monitoring_values {
+struct catpc_monitoring_values {
 	uint64_t llc;                /**< cache occupancy */
 	double ipc;                  /**< instructions per cycle */
 	uint64_t llc_misses;         /**< LLC misses - delta */
@@ -36,14 +36,14 @@ using MRC = std::map<unsigned, double>;
  * that will be used to find all PIDs belonging to the app 
  */
 
-struct application {
+struct catpc_application {
 	std::string cmdline;
-	monitoring_values values;
-	ushort CLOS_id;
+	catpc_monitoring_values values;
+	unsigned int CLOS_id;
 
-	application() : cmdline{""}, values{}, CLOS_id{0} {}
+	catpc_application() : cmdline{""}, values{}, CLOS_id{0} {}
 
-	application(const std::string& cl, const monitoring_values& v, const ushort& cid)
+	catpc_application(const std::string& cl, const catpc_monitoring_values& v, const unsigned int& cid)
 		: cmdline{cl}, values{v}, CLOS_id{cid} {}
 };
 
@@ -51,7 +51,7 @@ struct application {
  * @brief System information about PQOS 
  * 
  */
-struct system_info {
+struct catpc_system_info {
 	struct pqos_config config;
 	const struct pqos_cpuinfo *p_cpu = NULL;
 	const struct pqos_cap *p_cap = NULL;
@@ -86,7 +86,7 @@ int start_monitoring(const std::string&);
  * @retval 0 OK
  * @retval -1 error
  */
-int poll_monitoring_data(std::unordered_map<std::string, application*>&);
+int poll_monitoring_data(std::unordered_map<std::string, catpc_application*>&);
 
 /**
  * @brief Stop monitoring on all PIDs
@@ -94,14 +94,13 @@ int poll_monitoring_data(std::unordered_map<std::string, application*>&);
  * @param [in] applications application map list
  * 
  */
-void stop_monitoring(std::unordered_map<std::string, application*>&);
+void stop_monitoring(std::unordered_map<std::string, catpc_application*>&);
 
 /**
  * @brief Get the system info about PQOS
  * 
  * @return system_info 
  */
-system_info get_system_info();
-
+catpc_system_info get_system_info();
 
 #endif
