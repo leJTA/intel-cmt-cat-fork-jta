@@ -150,7 +150,17 @@ int main(int argc, char** argv)
 			break;
 
 		case CATPC_REMOVE_APP_TO_MONITOR:
-			//log_fprint(log_file, );
+			log_fprint(log_file, "INFO: message received: CATPC_REMOVE_APP_TO_MONITOR\n");
+
+			// receive cmd line string
+			bytes_read = recv(sock, &sz, sizeof(size_t), 0);
+			bytes_read = recv(sock, buf, sz * sizeof(char), 0);
+			cmdline.assign(buf);
+
+			// add application to the map
+			applications.erase(cmdline);
+			
+			log_fprint(log_file, "INFO: app removed : %s\n", cmdline.c_str());
 			break;
 
 		case CATPC_GET_ALLOCATION_CONF:
@@ -212,11 +222,10 @@ exit:
 	// stop monitoring before exit
 	stop_monitoring(applications);
 	
-	// cleaning up everything
-	fclose(log_file);
-	
-	close(sock);
-
 	log_fprint(log_file, "INFO: Done.\n");
+	
+	// cleaning up everything
+	close(sock);
+	fclose(log_file);
 	return EXIT_SUCCESS;
 }

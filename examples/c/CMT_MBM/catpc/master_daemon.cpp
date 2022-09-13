@@ -48,7 +48,8 @@ struct notification_t {
 
 void connection_handler(connection_t*);
 void termination_handler(int signum);
-void fifo_monitoring();
+void watch_started_app();
+void watch_terminated_app();
 
 FILE* log_file = NULL;
 int sock;
@@ -125,7 +126,8 @@ int main(int argc, char** argv)
 	}
 	
 	// start fifo monitoring thread
-	std::thread fifo_thread(fifo_monitoring);
+	std::thread started_app_watcher(watch_started_app);
+	std::thread terminated_app_watcher(watch_terminated_app);
 
 	// Loop to accept incomming connections
 	while (!terminate) {
@@ -154,9 +156,13 @@ int main(int argc, char** argv)
 		delete conn;
 	}
 
-	if (fifo_thread.joinable()) {
-		fifo_thread.join();
+	if (started_app_watcher.joinable()) {
+		started_app_watcher.join();
 	}
+	if (terminated_app_watcher.joinable()) {
+		terminated_app_watcher.join();
+	}
+
 	for (std::thread& thd : threads) {
 		if (thd.joinable()) {
 			thd.join();
@@ -178,8 +184,6 @@ void connection_handler(connection_t* conn)
 	size_t sz, len;
 	char buf[512];
 
-	int step = 0;
-
 	while (true) {
 		{
 			// Read the notification object to know if there is a new app or if an app has been removed/terminated
@@ -188,23 +192,22 @@ void connection_handler(connection_t* conn)
 				notif.app_added = false;	// reset the flag
 				cmdline = notif.cmdline;
 				msg = CATPC_ADD_APP_TO_MONITOR;
-			}  
-			else if (step == 0) {
-				msg = CATPC_GET_ALLOCATION_CONF;
 			}
-			else if (step % 10 == 0) {
-				msg = CATPC_PERFORM_ALLOCATION;
-				for (auto app : sock_to_application[conn->sock]) {
-					app.second->CLOS_id = 2;
-				}
+			else if (notif.app_removed) {
+				notif.app_removed = false;	// reset the flag
+				cmdline = notif.cmdline;
+				msg = CATPC_REMOVE_APP_TO_MONITOR;
 			}
-			step++;
 		}
 
+		// Message management
 		switch (msg)
 		{
 		case CATPC_REMOVE_APP_TO_MONITOR:
-		case CATPC_ADD_APP_TO_MONITOR : 
+			sock_to_application[conn->sock].erase(notif.cmdline);
+			[[gnu::fallthrough]];
+
+		case CATPC_ADD_APP_TO_MONITOR:
 			if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
 				len = cmdline.size();
 				send(conn->sock, &len, sizeof(size_t), 0);
@@ -305,11 +308,11 @@ void termination_handler(int signum)
 	}
 }
 
-void fifo_monitoring()
+void watch_started_app()
 {
-	log_fprint(log_file, "INFO: starting fifo monitoring\n");
+	log_fprint(log_file, "INFO: starting started app watcher\n");
 	int fd;
-	const char* catpc_fifo = "/tmp/catpc.fifo";
+	const char* catpc_fifo = "/tmp/catpc.started.fifo";
 	char buf[512];
 
 	mkfifo(catpc_fifo, 0666);
@@ -331,4 +334,33 @@ void fifo_monitoring()
 		}
 		close(fd);
 	}
+}
+
+void watch_terminated_app()
+{
+	log_fprint(log_file, "INFO: starting terminated app watcher\n");
+	int fd;
+	const char* catpc_fifo = "/tmp/catpc.terminated.fifo";
+	char buf[512];
+
+	mkfifo(catpc_fifo, 0666);
+
+	while (!terminate) {
+		fd = open(catpc_fifo, O_RDONLY);
+		if (read(fd, buf, sizeof(buf)) < 0) {
+			log_fprint(log_file, "ERROR: read failed: %s(%d)\n", strerror(errno), errno);
+			return;
+		}
+		log_fprint(log_file, "INFO: app terminated: \"%s\"\n", buf);
+
+		for (std::pair<const int, notification_t>& it : sock_to_notification) {
+			{
+				std::lock_guard<std::mutex> lk(it.second.mtx);
+				it.second.app_removed = true;
+				it.second.cmdline.assign(buf);
+			}
+		}
+		close(fd);
+	}
+
 }
