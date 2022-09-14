@@ -34,6 +34,4 @@ std::vector<llc_ca> get_allocation_config();
  */
 int perform_allocation(std::unordered_map<std::string, catpc_application*>&);
 
-void set_logfile(FILE* file);
-
 #endif

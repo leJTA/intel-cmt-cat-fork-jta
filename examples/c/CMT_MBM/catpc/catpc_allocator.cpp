@@ -4,9 +4,6 @@
 
 #include "pqos.h"
 
-static FILE* test_log;
-void set_logfile(FILE* file) {test_log = file;}
-
 std::vector<llc_ca> get_allocation_config()
 {
 	unsigned l3cat_id_count, *l3cat_ids = NULL;

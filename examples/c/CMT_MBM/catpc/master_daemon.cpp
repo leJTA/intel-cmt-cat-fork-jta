@@ -13,6 +13,8 @@
 #include <string>
 #include <mutex>
 #include <unordered_map>
+#include <queue>
+#include <cassert>
 
 #include "catpc_utils.hpp"
 #include "catpc_monitor.hpp"
@@ -20,7 +22,7 @@
 
 #define MAX_CLIENTS 16			// Maximum number of slaves managed by CATPC master
 #define SERVER_PORT 10000
-#define PERIOD 1000000					// Period in milliseconds
+#define PERIOD 1000000			// Period in milliseconds
 
 struct connection_t {
 	int sock;
@@ -30,19 +32,19 @@ struct connection_t {
 
 struct notification_t {
 	std::mutex mtx;
+	enum event {
+		APP_ADDED = 0,
+		APP_REMOVED = 1
+	};
+	std::queue<std::pair<event, std::string>> event_queue;
 
-	bool app_added;				// new app flag
-	bool app_removed;				// removed app flag
-	std::string cmdline;			// command line of the app
-
-	notification_t() : app_added{false}, app_removed{false}, cmdline{""}
-	{}
+	notification_t(): event_queue() {
+		assert(event_queue.empty());
+	}
 
 	notification_t(const notification_t&& other)
 	{
-		this->app_added = other.app_added;
-		this->app_removed = other.app_removed;
-		this->cmdline = other.cmdline;
+		this->event_queue = other.event_queue;
 	}
 };
 
@@ -61,6 +63,11 @@ std::unordered_map<int, std::unordered_map<std::string, catpc_application*>> soc
 std::unordered_map<int, notification_t> sock_to_notification;
 std::unordered_map<int, std::vector<llc_ca>> sock_to_llcs;
 
+/*
+* =======================================
+* Main
+* =======================================
+*/
 int main(int argc, char** argv)
 {
 	pid_t pid = fork();
@@ -174,6 +181,12 @@ int main(int argc, char** argv)
 	return EXIT_SUCCESS;
 }
 
+/*
+* =======================================
+* Handlers and Watchers
+* =======================================
+*/
+
 void connection_handler(connection_t* conn)
 {
 	notification_t& notif = sock_to_notification[conn->sock];
@@ -188,23 +201,25 @@ void connection_handler(connection_t* conn)
 		{
 			// Read the notification object to know if there is a new app or if an app has been removed/terminated
 			std::lock_guard<std::mutex> lk(notif.mtx);
-			if (notif.app_added) {
-				notif.app_added = false;	// reset the flag
-				cmdline = notif.cmdline;
-				msg = CATPC_ADD_APP_TO_MONITOR;
-			}
-			else if (notif.app_removed) {
-				notif.app_removed = false;	// reset the flag
-				cmdline = notif.cmdline;
-				msg = CATPC_REMOVE_APP_TO_MONITOR;
+			if (!notif.event_queue.empty()) {
+				std::pair<notification_t::event, std::string>& p = notif.event_queue.front();
+				cmdline = p.second;
+				switch (p.first) {
+				case notification_t::event::APP_ADDED:
+					msg = CATPC_ADD_APP_TO_MONITOR;
+					break;
+				case notification_t::event::APP_REMOVED:
+					msg = CATPC_REMOVE_APP_TO_MONITOR;
+					break;
+				}
+				notif.event_queue.pop();
 			}
 		}
 
 		// Message management
-		switch (msg)
-		{
+		switch (msg) {
 		case CATPC_REMOVE_APP_TO_MONITOR:
-			sock_to_application[conn->sock].erase(notif.cmdline);
+			sock_to_application[conn->sock].erase(cmdline);
 			[[gnu::fallthrough]];
 
 		case CATPC_ADD_APP_TO_MONITOR:
@@ -224,7 +239,7 @@ void connection_handler(connection_t* conn)
 					// Read the cmdline (size then chars)
 					bytes_read = recv(conn->sock, &len, sizeof(size_t), 0);
 					bytes_read = recv(conn->sock, buf, len * sizeof(char), 0);
-					app.cmdline.assign(buf);
+					app.cmdline.assign(buf, len);
 
 					// Read monitoring data
 					bytes_read = recv(conn->sock, &app.values, sizeof(catpc_monitoring_values), 0);
@@ -235,7 +250,7 @@ void connection_handler(connection_t* conn)
 					// store data
 					sock_to_application[conn->sock][app.cmdline] = new catpc_application{app};
 
-					log_fprint(log_file, "%s : MR[%.1fkB] = %1.4f\n", app.cmdline.c_str(), 
+					log_fprint(log_file, "%s -> MR[%.1fkB] = %1.4f\n", app.cmdline.c_str(), 
 						sock_to_application[conn->sock][app.cmdline]->values.llc / 1024.0, 
 						(double)sock_to_application[conn->sock][app.cmdline]->values.llc_misses / sock_to_application[conn->sock][app.cmdline]->values.llc_references);
 				}
@@ -310,7 +325,7 @@ void termination_handler(int signum)
 
 void watch_started_app()
 {
-	log_fprint(log_file, "INFO: starting started app watcher\n");
+	log_fprint(log_file, "INFO: starting \"started_app_watcher\"\n");
 	int fd;
 	const char* catpc_fifo = "/tmp/catpc.started.fifo";
 	char buf[512];
@@ -328,17 +343,17 @@ void watch_started_app()
 		for (std::pair<const int, notification_t>& it : sock_to_notification) {
 			{
 				std::lock_guard<std::mutex> lk(it.second.mtx);
-				it.second.app_added = true;
-				it.second.cmdline.assign(buf);
+				it.second.event_queue.push(std::make_pair(notification_t::event::APP_ADDED, std::string(buf)));
 			}
 		}
+		memset(buf, '\0', sizeof(buf));
 		close(fd);
 	}
 }
 
 void watch_terminated_app()
 {
-	log_fprint(log_file, "INFO: starting terminated app watcher\n");
+	log_fprint(log_file, "INFO: starting \"terminated_app_watcher\"\n");
 	int fd;
 	const char* catpc_fifo = "/tmp/catpc.terminated.fifo";
 	char buf[512];
@@ -356,11 +371,10 @@ void watch_terminated_app()
 		for (std::pair<const int, notification_t>& it : sock_to_notification) {
 			{
 				std::lock_guard<std::mutex> lk(it.second.mtx);
-				it.second.app_removed = true;
-				it.second.cmdline.assign(buf);
+				it.second.event_queue.push(std::make_pair(notification_t::event::APP_REMOVED, std::string(buf)));
 			}
 		}
+		memset(buf, '\0', sizeof(buf));
 		close(fd);
 	}
-
 }

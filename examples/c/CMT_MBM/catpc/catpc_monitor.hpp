@@ -103,4 +103,5 @@ void stop_monitoring(std::unordered_map<std::string, catpc_application*>&);
  */
 catpc_system_info get_system_info();
 
+void set_logfile(FILE* file);
 #endif

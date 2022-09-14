@@ -18,6 +18,11 @@
 FILE* log_file = NULL;
 std::unordered_map<std::string, catpc_application*> applications;
 
+/*
+* =======================================
+* Main
+* =======================================
+*/
 int main(int argc, char** argv)
 {
 	pid_t pid = fork();
@@ -134,15 +139,17 @@ int main(int argc, char** argv)
 			// receive cmd line string
 			bytes_read = recv(sock, &sz, sizeof(size_t), 0);
 			bytes_read = recv(sock, buf, sz * sizeof(char), 0);
-			cmdline.assign(buf);
+			cmdline.assign(buf, sz);
+			log_fprint(log_file, "DEBUG: len = %d, sz = %d, byte_read = %d\n", strlen(buf), sz, bytes_read);
 
 			// add application to the map
 			applications[cmdline] = new catpc_application{cmdline, catpc_monitoring_values(), 0};
 
 			// start monitoring on app launched by the command line
+			set_logfile(log_file);
 			ret = start_monitoring(cmdline);
 			if (ret < 0) {
-				log_fprint(log_file, "ERROR: unable to start monitoring on app \"%s\"\n", cmdline.c_str());
+				log_fprint(log_file, "ERROR: unable to start monitoring on app \"%s(%d)\"\n", cmdline.c_str(), cmdline.size());
 				exit(EXIT_FAILURE);
 			}
 			
@@ -155,7 +162,7 @@ int main(int argc, char** argv)
 			// receive cmd line string
 			bytes_read = recv(sock, &sz, sizeof(size_t), 0);
 			bytes_read = recv(sock, buf, sz * sizeof(char), 0);
-			cmdline.assign(buf);
+			cmdline.assign(buf, sz);
 
 			// add application to the map
 			applications.erase(cmdline);
@@ -184,7 +191,7 @@ int main(int argc, char** argv)
 				bytes_read = recv(sock, buf, sz * sizeof(char), 0);
 				bytes_read = recv(sock, &CLOS_id, sizeof(unsigned int), 0);
 				log_fprint(log_file, "INFO: %s: COS%u -> COS%u\n", buf, applications[cmdline]->CLOS_id, CLOS_id);
-				cmdline.assign(buf);
+				cmdline.assign(buf, sz);
 				applications[cmdline]->CLOS_id = CLOS_id;
 			}
 
