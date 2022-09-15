@@ -326,27 +326,30 @@ void termination_handler(int signum)
 void watch_started_app()
 {
 	log_fprint(log_file, "INFO: starting \"started_app_watcher\"\n");
-	int fd;
 	const char* catpc_fifo = "/tmp/catpc.started.fifo";
+	int bytes_read = 0;
 	char buf[512];
+	int fd;
 
 	mkfifo(catpc_fifo, 0666);
 
 	while (!terminate) {
 		fd = open(catpc_fifo, O_RDONLY);
-		if (read(fd, buf, sizeof(buf)) < 0) {
+		bytes_read = read(fd, buf, sizeof(buf));
+		if ( bytes_read > 0) {
+			log_fprint(log_file, "INFO: app launched: \"%s\"\n", buf);
+			for (std::pair<const int, notification_t>& it : sock_to_notification) {
+				{
+					std::lock_guard<std::mutex> lk(it.second.mtx);
+					it.second.event_queue.push(std::make_pair(notification_t::event::APP_ADDED, std::string(buf)));
+				}
+			}
+		}
+		else if (bytes_read < 0) {
 			log_fprint(log_file, "ERROR: read failed: %s(%d)\n", strerror(errno), errno);
 			return;
 		}
-		log_fprint(log_file, "INFO: app launched: \"%s\"\n", buf);
-
-		for (std::pair<const int, notification_t>& it : sock_to_notification) {
-			{
-				std::lock_guard<std::mutex> lk(it.second.mtx);
-				it.second.event_queue.push(std::make_pair(notification_t::event::APP_ADDED, std::string(buf)));
-			}
-		}
-		memset(buf, '\0', sizeof(buf));
+		memset(buf, 0, sizeof(buf));
 		close(fd);
 	}
 }
@@ -354,27 +357,30 @@ void watch_started_app()
 void watch_terminated_app()
 {
 	log_fprint(log_file, "INFO: starting \"terminated_app_watcher\"\n");
-	int fd;
 	const char* catpc_fifo = "/tmp/catpc.terminated.fifo";
+	int bytes_read = 0;
 	char buf[512];
+	int fd;
 
 	mkfifo(catpc_fifo, 0666);
 
 	while (!terminate) {
 		fd = open(catpc_fifo, O_RDONLY);
-		if (read(fd, buf, sizeof(buf)) < 0) {
+		bytes_read = read(fd, buf, sizeof(buf));
+		if ( bytes_read > 0) {
+			log_fprint(log_file, "INFO: app launched: \"%s\"\n", buf);
+			for (std::pair<const int, notification_t>& it : sock_to_notification) {
+				{
+					std::lock_guard<std::mutex> lk(it.second.mtx);
+					it.second.event_queue.push(std::make_pair(notification_t::event::APP_REMOVED, std::string(buf)));
+				}
+			}
+		}
+		else if (bytes_read < 0) {
 			log_fprint(log_file, "ERROR: read failed: %s(%d)\n", strerror(errno), errno);
 			return;
 		}
-		log_fprint(log_file, "INFO: app terminated: \"%s\"\n", buf);
-
-		for (std::pair<const int, notification_t>& it : sock_to_notification) {
-			{
-				std::lock_guard<std::mutex> lk(it.second.mtx);
-				it.second.event_queue.push(std::make_pair(notification_t::event::APP_REMOVED, std::string(buf)));
-			}
-		}
-		memset(buf, '\0', sizeof(buf));
+		memset(buf, 0, sizeof(buf));
 		close(fd);
 	}
 }

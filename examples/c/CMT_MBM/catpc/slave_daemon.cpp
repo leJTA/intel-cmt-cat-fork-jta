@@ -140,7 +140,6 @@ int main(int argc, char** argv)
 			bytes_read = recv(sock, &sz, sizeof(size_t), 0);
 			bytes_read = recv(sock, buf, sz * sizeof(char), 0);
 			cmdline.assign(buf, sz);
-			log_fprint(log_file, "DEBUG: len = %d, sz = %d, byte_read = %d\n", strlen(buf), sz, bytes_read);
 
 			// add application to the map
 			applications[cmdline] = new catpc_application{cmdline, catpc_monitoring_values(), 0};

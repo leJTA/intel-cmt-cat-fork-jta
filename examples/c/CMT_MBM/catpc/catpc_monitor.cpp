@@ -63,7 +63,6 @@ int start_monitoring(const std::string& cmdline)
 	int ret;
 
 	sel_process_num = get_pids_by_cmdline(pids, cmdline.c_str());
-	log_fprint(test_log, "DEBUG: sel_proc_num = %d, cmdline = %s(%d)\n", sel_process_num, cmdline.c_str(), cmdline.size());
 	m_mon_grps[cmdline] = new pqos_mon_data();
 	ret = pqos_mon_start_pids(sel_process_num, pids, sel_events, NULL,
 										m_mon_grps[cmdline]);
