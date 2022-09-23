@@ -13,8 +13,10 @@
 #include <string>
 #include <mutex>
 #include <unordered_map>
-#include <queue>
 #include <cassert>
+#include <chrono>
+#include <condition_variable>
+#include <atomic>
 
 #include "catpc_utils.hpp"
 #include "catpc_monitor.hpp"
@@ -22,46 +24,28 @@
 
 #define MAX_CLIENTS 16			// Maximum number of slaves managed by CATPC master
 #define SERVER_PORT 10000
-#define PERIOD 1000000			// Period in milliseconds
-
-struct connection_t {
-	int sock;
-	struct sockaddr_in address;
-	socklen_t addr_len;
-};
-
-struct notification_t {
-	std::mutex mtx;
-	enum event {
-		APP_ADDED = 0,
-		APP_REMOVED = 1
-	};
-	std::queue<std::pair<event, std::string>> event_queue;
-
-	notification_t(): event_queue() {
-		assert(event_queue.empty());
-	}
-
-	notification_t(const notification_t&& other)
-	{
-		this->event_queue = other.event_queue;
-	}
-};
 
 void connection_handler(connection_t*);
+void processing_loop();
 void termination_handler(int signum);
 void watch_started_app();
 void watch_terminated_app();
 
-FILE* log_file = NULL;
+const std::chrono::milliseconds period{1000};
+
 int sock;
-unsigned client_count = 0;
+FILE* log_file = NULL;
+std::atomic<unsigned int> client_count = 0;
 std::vector<connection_t*> connections;
 sig_atomic_t terminate = 0;
+std::mutex global_mtx;
+std::condition_variable global_cv;
+std::chrono::time_point<std::chrono::steady_clock> start_time;
 
 std::unordered_map<int, std::unordered_map<std::string, catpc_application*>> sock_to_application;
 std::unordered_map<int, notification_t> sock_to_notification;
 std::unordered_map<int, std::vector<llc_ca>> sock_to_llcs;
+std::unordered_map<int, std::unordered_map<std::string, std::map<uint64_t, double>>> sock_to_mrc;
 
 /*
 * =======================================
@@ -136,18 +120,23 @@ int main(int argc, char** argv)
 	std::thread started_app_watcher(watch_started_app);
 	std::thread terminated_app_watcher(watch_terminated_app);
 
+	// start procressing loop thread
+	std::thread processing_thread(processing_loop);
+
 	// Loop to accept incomming connections
+	start_time = std::chrono::steady_clock::now();
 	while (!terminate) {
-		connections.push_back(new connection_t());
-		connections.back()->sock = accept(sock, (struct sockaddr*)&connections.back()->address, &connections.back()->addr_len);
-		if (connections.back()->sock < 0) {
+		connection_t conn;
+		conn.sock = accept(sock, (struct sockaddr*)&conn.address, &conn.addr_len);
+		if (conn.sock < 0) {
 			log_fprint(log_file, "ERROR: accept failed: %s (%d)\n", strerror(errno), errno);
 			continue;
 		}
+		connections.push_back(new connection_t(conn));
 		client_count++;
 
-		// insert corresponding and mutex
-		sock_to_notification.insert(std::make_pair(connections.back()->sock, notification_t()));
+		// insert corresponding map elements
+		sock_to_notification.emplace(connections.back()->sock, notification_t());
 		
 		log_fprint(log_file, "INFO: slave connected: %s\n", inet_ntoa(connections.back()->address.sin_addr));
 
@@ -157,6 +146,8 @@ int main(int argc, char** argv)
 			log_fprint(log_file, "ERROR: could not create thread for slave %s\n", inet_ntoa(connections.back()->address.sin_addr));
 		}
 	}
+	
+	// Close everything
 
 	for (connection_t* conn : connections) {
 		close(conn->sock);
@@ -168,6 +159,9 @@ int main(int argc, char** argv)
 	}
 	if (terminated_app_watcher.joinable()) {
 		terminated_app_watcher.join();
+	}
+	if (processing_thread.joinable()) {
+		processing_thread.join();
 	}
 
 	for (std::thread& thd : threads) {
@@ -200,7 +194,7 @@ void connection_handler(connection_t* conn)
 	while (true) {
 		{
 			// Read the notification object to know if there is a new app or if an app has been removed/terminated
-			std::lock_guard<std::mutex> lk(notif.mtx);
+			std::scoped_lock<std::mutex> lk(notif.mtx);
 			if (!notif.event_queue.empty()) {
 				std::pair<notification_t::event, std::string>& p = notif.event_queue.front();
 				cmdline = p.second;
@@ -219,6 +213,7 @@ void connection_handler(connection_t* conn)
 		// Message management
 		switch (msg) {
 		case CATPC_REMOVE_APP_TO_MONITOR:
+			delete sock_to_application[conn->sock][cmdline];
 			sock_to_application[conn->sock].erase(cmdline);
 			[[gnu::fallthrough]];
 
@@ -248,11 +243,7 @@ void connection_handler(connection_t* conn)
 					bytes_read = recv(conn->sock, &app.CLOS_id, sizeof(unsigned int), 0);
 
 					// store data
-					sock_to_application[conn->sock][app.cmdline] = new catpc_application{app};
-
-					log_fprint(log_file, "%s -> MR[%.1fkB] = %1.4f\n", app.cmdline.c_str(), 
-						sock_to_application[conn->sock][app.cmdline]->values.llc / 1024.0, 
-						(double)sock_to_application[conn->sock][app.cmdline]->values.llc_misses / sock_to_application[conn->sock][app.cmdline]->values.llc_references);
+					sock_to_application[conn->sock].insert_or_assign(app.cmdline, new catpc_application(app));
 				}
 			}
 			break;
@@ -288,8 +279,7 @@ void connection_handler(connection_t* conn)
 		break;
 
 		default:
-				log_fprint(log_file, "unknow message value: %d\n", msg);
-
+			log_fprint(log_file, "unknow message value: %d\n", msg);
 		}
 		
 		// Error handling
@@ -307,12 +297,35 @@ void connection_handler(connection_t* conn)
 			break;
 		}
 
+		{
+			std::scoped_lock<std::mutex> lk(global_mtx);
+			global_cv.notify_one();
+		}
+
 		msg = CATPC_GET_MONITORING_VALUES;	// set to the default message value
-		usleep(PERIOD);
+		std::this_thread::sleep_for(period - (std::chrono::steady_clock::now() - start_time) % period);
 	}
 
-
+	client_count--;
 	close(conn->sock);
+}
+
+void processing_loop()
+{
+	while (!terminate) {
+		// Wait for the signal of each worker thread
+		unsigned i = 0;
+		do {
+			std::unique_lock<std::mutex> lk(global_mtx);
+			global_cv.wait(lk);
+		} while (++i < client_count);
+
+		for (connection_t* conn : connections) {
+			for (const auto& entry : sock_to_application[conn->sock]) {
+				
+			}
+		}
+	} 
 }
 
 void termination_handler(int signum) 
@@ -340,7 +353,7 @@ void watch_started_app()
 			log_fprint(log_file, "INFO: app launched: \"%s\"\n", buf);
 			for (std::pair<const int, notification_t>& it : sock_to_notification) {
 				{
-					std::lock_guard<std::mutex> lk(it.second.mtx);
+					std::scoped_lock<std::mutex> lk(it.second.mtx);
 					it.second.event_queue.push(std::make_pair(notification_t::event::APP_ADDED, std::string(buf)));
 				}
 			}
@@ -368,10 +381,10 @@ void watch_terminated_app()
 		fd = open(catpc_fifo, O_RDONLY);
 		bytes_read = read(fd, buf, sizeof(buf));
 		if ( bytes_read > 0) {
-			log_fprint(log_file, "INFO: app launched: \"%s\"\n", buf);
+			log_fprint(log_file, "INFO: app terminated: \"%s\"\n", buf);
 			for (std::pair<const int, notification_t>& it : sock_to_notification) {
 				{
-					std::lock_guard<std::mutex> lk(it.second.mtx);
+					std::scoped_lock<std::mutex> lk(it.second.mtx);
 					it.second.event_queue.push(std::make_pair(notification_t::event::APP_REMOVED, std::string(buf)));
 				}
 			}

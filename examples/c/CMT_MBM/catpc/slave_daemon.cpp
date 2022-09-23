@@ -142,7 +142,7 @@ int main(int argc, char** argv)
 			cmdline.assign(buf, sz);
 
 			// add application to the map
-			applications[cmdline] = new catpc_application{cmdline, catpc_monitoring_values(), 0};
+			applications.try_emplace(cmdline, new catpc_application(cmdline, catpc_monitoring_values(), 0));
 
 			// start monitoring on app launched by the command line
 			set_logfile(log_file);

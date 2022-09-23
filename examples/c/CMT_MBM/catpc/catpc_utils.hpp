@@ -5,10 +5,15 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h> 
 #include <signal.h>
 #include <dirent.h>
 #include <string.h>
 #include <stdlib.h>
+#include <queue>
+#include <mutex>
+#include <cassert>
 
 #include "catpc_monitor.hpp"
 
@@ -22,6 +27,30 @@ enum catpc_message {
 	CATPC_PERFORM_ALLOCATION = 2,    /**< perform allocation */
 	CATPC_ADD_APP_TO_MONITOR = 3,		/**< add application to monitor */
 	CATPC_REMOVE_APP_TO_MONITOR = 4		/**< remove application to monitor */
+};
+
+struct connection_t {
+	int sock;
+	struct sockaddr_in address;
+	socklen_t addr_len;
+};
+
+struct notification_t {
+	std::mutex mtx;
+	enum event {
+		APP_ADDED = 0,
+		APP_REMOVED = 1
+	};
+	std::queue<std::pair<event, std::string>> event_queue;
+
+	notification_t(): event_queue() {
+		assert(event_queue.empty());
+	}
+
+	notification_t(const notification_t&& other)
+	{
+		this->event_queue = other.event_queue;
+	}
 };
 
 struct process_tree {
