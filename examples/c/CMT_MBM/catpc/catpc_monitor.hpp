@@ -40,11 +40,12 @@ struct catpc_application {
 	std::string cmdline;
 	catpc_monitoring_values values;
 	unsigned int CLOS_id;
+	uint64_t required_llc;
 
-	catpc_application() : cmdline{""}, values{}, CLOS_id{0} {}
+	catpc_application(std::string cl = "") : cmdline{cl}, values{}, CLOS_id{0}, required_llc{0} {}
 
 	catpc_application(const std::string& cl, const catpc_monitoring_values& v, const unsigned int& cid)
-		: cmdline{cl}, values{v}, CLOS_id{cid} {}
+		: cmdline{cl}, values{v}, CLOS_id{cid}, required_llc{0} {}
 };
 
 /**

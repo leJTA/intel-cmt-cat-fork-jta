@@ -169,8 +169,8 @@ int main(int argc, char** argv)
 			log_fprint(log_file, "INFO: app removed : %s\n", cmdline.c_str());
 			break;
 
-		case CATPC_GET_ALLOCATION_CONF:
-			log_fprint(log_file, "INFO: message received: CATPC_GET_ALLOCATION_CONF\n");
+		case CATPC_GET_CAPABILITIES:
+			log_fprint(log_file, "INFO: message received: CATPC_GET_CAPABILITIES\n");
 			sz = llcs.size();
 			bytes_sent = send(sock, &sz, sizeof(size_t), 0);
 			for (llc_ca llc : llcs) {
@@ -189,8 +189,8 @@ int main(int argc, char** argv)
 				bytes_read = recv(sock, &sz, sizeof(size_t), 0);
 				bytes_read = recv(sock, buf, sz * sizeof(char), 0);
 				bytes_read = recv(sock, &CLOS_id, sizeof(unsigned int), 0);
-				log_fprint(log_file, "INFO: %s: COS%u -> COS%u\n", buf, applications[cmdline]->CLOS_id, CLOS_id);
 				cmdline.assign(buf, sz);
+				log_fprint(log_file, "INFO: %s: COS%u -> COS%u\n", cmdline.c_str(), applications[cmdline]->CLOS_id, CLOS_id);
 				applications[cmdline]->CLOS_id = CLOS_id;
 			}
 

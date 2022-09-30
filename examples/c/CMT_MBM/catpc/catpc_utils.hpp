@@ -14,6 +14,7 @@
 #include <queue>
 #include <mutex>
 #include <cassert>
+#include <ostream>
 
 #include "catpc_monitor.hpp"
 
@@ -23,7 +24,7 @@
  */
 enum catpc_message {
 	CATPC_GET_MONITORING_VALUES = 0, /**< retrieve monitoring values */
-	CATPC_GET_ALLOCATION_CONF = 1,   /**< retrieve allocation configuration */
+	CATPC_GET_CAPABILITIES = 1,   /**< retrieve system capabilities */
 	CATPC_PERFORM_ALLOCATION = 2,    /**< perform allocation */
 	CATPC_ADD_APP_TO_MONITOR = 3,		/**< add application to monitor */
 	CATPC_REMOVE_APP_TO_MONITOR = 4		/**< remove application to monitor */
@@ -39,7 +40,8 @@ struct notification_t {
 	std::mutex mtx;
 	enum event {
 		APP_ADDED = 0,
-		APP_REMOVED = 1
+		APP_REMOVED = 1,
+		PERFORM_ALLOCATION = 2
 	};
 	std::queue<std::pair<event, std::string>> event_queue;
 
@@ -110,5 +112,14 @@ int get_pids_by_cmdline(pid_t* pids, const char* cmdline);
  * @param [in] args variadic arguments to follow depending on \a fmt. 
  */
 void log_fprint(FILE* fp, const char* fmt, ...);
+
+/**
+ * @brief operator definition to print map on output stream
+ * 
+ * @param [in] os output stream
+ * @param [in] m the map
+ * @return std::ofstream& reference to the output stream 
+ */
+std::ostream& operator<<(std::ostream& os, const std::map<uint64_t, double>& m);
 
 #endif

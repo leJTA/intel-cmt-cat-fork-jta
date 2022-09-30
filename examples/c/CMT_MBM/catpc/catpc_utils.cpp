@@ -203,3 +203,11 @@ void log_fprint(FILE* fp, const char* fmt, ...)
 	va_end(args);
 	fflush(fp);
 }
+
+std::ostream& operator<<(std::ostream& os, const std::map<uint64_t, double>& m)
+{
+	for (auto& entry : m) {
+		os << entry.first << ", " << entry.second << "\n";
+	}
+	return os;
+}

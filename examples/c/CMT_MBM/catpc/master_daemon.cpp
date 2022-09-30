@@ -17,6 +17,8 @@
 #include <chrono>
 #include <condition_variable>
 #include <atomic>
+#include <fstream>
+#include <iostream>
 
 #include "catpc_utils.hpp"
 #include "catpc_monitor.hpp"
@@ -185,7 +187,7 @@ void connection_handler(connection_t* conn)
 {
 	notification_t& notif = sock_to_notification[conn->sock];
 	int bytes_read = 0, bytes_sent = 0;
-	enum catpc_message msg = CATPC_GET_MONITORING_VALUES;
+	enum catpc_message msg = CATPC_GET_CAPABILITIES;
 	std::string cmdline;
 	catpc_application app;
 	size_t sz, len;
@@ -204,6 +206,9 @@ void connection_handler(connection_t* conn)
 					break;
 				case notification_t::event::APP_REMOVED:
 					msg = CATPC_REMOVE_APP_TO_MONITOR;
+					break;
+				case notification_t::event::PERFORM_ALLOCATION:
+					msg = CATPC_PERFORM_ALLOCATION;
 					break;
 				}
 				notif.event_queue.pop();
@@ -231,24 +236,31 @@ void connection_handler(connection_t* conn)
 				bytes_read = recv(conn->sock, &sz, sizeof(size_t), 0);
 
 				for (size_t i = 0; i < sz && bytes_read > 0; ++i) {
+
 					// Read the cmdline (size then chars)
 					bytes_read = recv(conn->sock, &len, sizeof(size_t), 0);
 					bytes_read = recv(conn->sock, buf, len * sizeof(char), 0);
-					app.cmdline.assign(buf, len);
+					cmdline.assign(buf, len);
+					
+					// insert if not exist aka 'get or create'
+					sock_to_application[conn->sock].try_emplace(cmdline, new catpc_application(cmdline));
+					catpc_application* ptr = sock_to_application[conn->sock][cmdline];
 
 					// Read monitoring data
-					bytes_read = recv(conn->sock, &app.values, sizeof(catpc_monitoring_values), 0);
+					bytes_read = recv(conn->sock, &ptr->values, sizeof(catpc_monitoring_values), 0);
 
 					// Read CLOS id
-					bytes_read = recv(conn->sock, &app.CLOS_id, sizeof(unsigned int), 0);
-
-					// store data
-					sock_to_application[conn->sock].insert_or_assign(app.cmdline, new catpc_application(app));
+					bytes_read = recv(conn->sock, &ptr->CLOS_id, sizeof(unsigned int), 0);
 				}
-			}
-			break;
+				// Notify the loop processing thread
+				{
+					std::scoped_lock<std::mutex> lk(global_mtx);
+					global_cv.notify_one();
+				}
+			}	
+		break;
 
-		case CATPC_GET_ALLOCATION_CONF:
+		case CATPC_GET_CAPABILITIES:
 		if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
 			sock_to_llcs[conn->sock].clear();								// Clear the llc_ca list
 			bytes_read = recv(conn->sock, &sz, sizeof(size_t), 0);	// read the number of llc/sockets
@@ -269,8 +281,9 @@ void connection_handler(connection_t* conn)
 
 		case CATPC_PERFORM_ALLOCATION:
 			if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
-				for (std::pair<std::string, catpc_application*> element : sock_to_application[conn->sock]) {
-					len = cmdline.size();
+				for (const std::pair<std::string, catpc_application*>& element : sock_to_application[conn->sock]) {
+					log_fprint(log_file, "DEBUG: perform allocation of [%s]\n", element.first.c_str());
+					len = element.first.size();
 					send(conn->sock, &len, sizeof(size_t), 0);
 					send(conn->sock, element.first.c_str(), len * sizeof(char), 0);
 					send(conn->sock, &element.second->CLOS_id, sizeof(unsigned int), 0);
@@ -297,11 +310,6 @@ void connection_handler(connection_t* conn)
 			break;
 		}
 
-		{
-			std::scoped_lock<std::mutex> lk(global_mtx);
-			global_cv.notify_one();
-		}
-
 		msg = CATPC_GET_MONITORING_VALUES;	// set to the default message value
 		std::this_thread::sleep_for(period - (std::chrono::steady_clock::now() - start_time) % period);
 	}
@@ -312,20 +320,59 @@ void connection_handler(connection_t* conn)
 
 void processing_loop()
 {
+	std::unordered_map<std::string, std::map<uint64_t, double>> mrc;
+	
 	while (!terminate) {
 		// Wait for the signal of each worker thread
 		unsigned i = 0;
 		do {
-			std::unique_lock<std::mutex> lk(global_mtx);
+			std::unique_lock<std::mutex> lk{global_mtx};
 			global_cv.wait(lk);
 		} while (++i < client_count);
 
+		bool changed = false;
 		for (connection_t* conn : connections) {
 			for (const auto& entry : sock_to_application[conn->sock]) {
+				mrc[entry.second->cmdline][entry.second->values.llc] = (double)entry.second->values.llc_misses / entry.second->values.llc_references;
+				log_fprint(log_file, "INFO: [%s] -> MRC[%.1fKB] = %1.4f\n", entry.second->cmdline.c_str(), 
+					entry.second->values.llc / 1024.0, (double)entry.second->values.llc_misses / entry.second->values.llc_references);
 				
+				// If the CLOS_id done is less than the last CLOS_id, continue MRC evaluation to the next CLOS 
+				if (entry.second->CLOS_id < sock_to_llcs[conn->sock][0].clos_count - 1) {
+					// Go to the next CLOS
+					entry.second->CLOS_id++;
+					
+					// Avoid out of bound CLOS_id
+					assert(entry.second->CLOS_id < sock_to_llcs[conn->sock][0].clos_count);
+
+					changed = true;
+				}
+			}
+		
+			if (changed) {
+				// Push perform allocation notification message
+				notification_t& notif = sock_to_notification[conn->sock];
+				std::lock_guard<std::mutex> lk{notif.mtx};
+				notif.event_queue.push(std::make_pair(notification_t::event::PERFORM_ALLOCATION, ""));
 			}
 		}
-	} 
+		// Print on file
+		/*
+		for (const std::pair<std::string, std::map<uint64_t, double>>& entry : mrc) {\
+			std::string fname{entry.first + ".csv"};
+			FILE* csv_file = fopen(fname.c_str(), "w");
+			//std::ofstream ofs{entry.first + ".csv", std::ios::ate};
+			//ofs << entry.second;
+			if (csv_file == NULL)
+				break;
+
+			for (const auto& e : entry.second) {
+				fprintf(csv_file, "%.1f, %1.4f\n", e.first / 1024.0, e.second);
+			}
+			fclose(csv_file);
+		}
+		*/
+	}
 }
 
 void termination_handler(int signum) 
