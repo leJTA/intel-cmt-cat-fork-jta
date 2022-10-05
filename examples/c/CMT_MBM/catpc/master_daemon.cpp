@@ -6,7 +6,6 @@
 #include <sys/socket.h> 
 #include <arpa/inet.h>
 #include <errno.h>
-#include <chrono>
 #include <thread>
 #include <vector>
 #include <memory>
@@ -33,7 +32,7 @@ void termination_handler(int signum);
 void watch_started_app();
 void watch_terminated_app();
 
-const std::chrono::milliseconds period{1000};
+const std::chrono::milliseconds period{200};
 
 int sock;
 FILE* log_file = NULL;
@@ -333,20 +332,24 @@ void processing_loop()
 		bool changed = false;
 		for (connection_t* conn : connections) {
 			for (const auto& entry : sock_to_application[conn->sock]) {
-				mrc[entry.second->cmdline][entry.second->values.llc] = (double)entry.second->values.llc_misses / entry.second->values.llc_references;
+				// If the CLOS_id done is less than the last CLOS_id, continue MRC evaluation to the next CLOS 
+				if (!entry.second->eval_done) {
+					mrc[entry.second->cmdline][entry.second->values.llc] = (double)entry.second->values.llc_misses / entry.second->values.llc_references;
+					if (entry.second->CLOS_id < sock_to_llcs[conn->sock][0].clos_count - 1) {
+						// Go to the next CLOS
+						entry.second->CLOS_id++;
+						
+						// Avoid out of bound CLOS_id
+						assert(entry.second->CLOS_id < sock_to_llcs[conn->sock][0].clos_count);
+
+						changed = true;
+					}
+					else { // (entry.second->CLOS_id == sock_to_llcs[conn->sock][0].clos_count - 1)
+						entry.second->eval_done = true;
+					}
+				}
 				log_fprint(log_file, "INFO: [%s] -> MRC[%.1fKB] = %1.4f\n", entry.second->cmdline.c_str(), 
 					entry.second->values.llc / 1024.0, (double)entry.second->values.llc_misses / entry.second->values.llc_references);
-				
-				// If the CLOS_id done is less than the last CLOS_id, continue MRC evaluation to the next CLOS 
-				if (entry.second->CLOS_id < sock_to_llcs[conn->sock][0].clos_count - 1) {
-					// Go to the next CLOS
-					entry.second->CLOS_id++;
-					
-					// Avoid out of bound CLOS_id
-					assert(entry.second->CLOS_id < sock_to_llcs[conn->sock][0].clos_count);
-
-					changed = true;
-				}
 			}
 		
 			if (changed) {
@@ -356,22 +359,15 @@ void processing_loop()
 				notif.event_queue.push(std::make_pair(notification_t::event::PERFORM_ALLOCATION, ""));
 			}
 		}
-		// Print on file
-		/*
-		for (const std::pair<std::string, std::map<uint64_t, double>>& entry : mrc) {\
-			std::string fname{entry.first + ".csv"};
-			FILE* csv_file = fopen(fname.c_str(), "w");
-			//std::ofstream ofs{entry.first + ".csv", std::ios::ate};
-			//ofs << entry.second;
-			if (csv_file == NULL)
-				break;
 
+		// Print on file
+		for (const std::pair<std::string, std::map<uint64_t, double>>& entry : mrc) {
+			std::ofstream ofs{"/tmp/" + entry.first.substr(entry.first.rfind('/') + 1) + ".csv", std::ios::trunc};
 			for (const auto& e : entry.second) {
-				fprintf(csv_file, "%.1f, %1.4f\n", e.first / 1024.0, e.second);
+				ofs << (e.first / 1024.0) << ", " << e.second << "\n";
 			}
-			fclose(csv_file);
+			ofs.close();
 		}
-		*/
 	}
 }
 
