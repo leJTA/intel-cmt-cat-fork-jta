@@ -67,7 +67,7 @@ int start_monitoring(const std::string& cmdline)
 	ret = pqos_mon_start_pids(sel_process_num, pids, sel_events, NULL,
 										m_mon_grps[cmdline]);
 	if (ret != PQOS_RETVAL_OK) {
-		return -1;
+		return -1 * ret;
 	}
 
 	return 0;

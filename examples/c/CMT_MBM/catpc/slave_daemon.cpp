@@ -148,7 +148,7 @@ int main(int argc, char** argv)
 			set_logfile(log_file);
 			ret = start_monitoring(cmdline);
 			if (ret < 0) {
-				log_fprint(log_file, "ERROR: unable to start monitoring on app \"%s(%d)\"\n", cmdline.c_str(), cmdline.size());
+				log_fprint(log_file, "ERROR: unable to start monitoring on app \"%s(%d)\"\n", cmdline.c_str(), ret);
 				exit(EXIT_FAILURE);
 			}
 			
