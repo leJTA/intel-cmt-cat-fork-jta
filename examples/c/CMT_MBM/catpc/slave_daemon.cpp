@@ -131,7 +131,7 @@ int main(int argc, char** argv)
 				bytes_sent = send(sock, &element.second->values, sizeof(catpc_monitoring_values), 0);		// send monitoring values
 				bytes_sent = send(sock, &element.second->CLOS_id, sizeof(unsigned int), 0);					// send CLOS id
 			}
-								
+
 			break;
 		case CATPC_ADD_APP_TO_MONITOR:
 			log_fprint(log_file, "INFO: message received: CATPC_ADD_APP_TO_MONITOR\n");
@@ -141,12 +141,14 @@ int main(int argc, char** argv)
 			bytes_read = recv(sock, buf, sz * sizeof(char), 0);
 			cmdline.assign(buf, sz);
 
+
 			// add application to the map
 			applications.try_emplace(cmdline, new catpc_application(cmdline, catpc_monitoring_values(), 0));
 
 			// start monitoring on app launched by the command line
 			set_logfile(log_file);
 			ret = start_monitoring(cmdline);
+			log_fprint(log_file, "[DEBUG]: %s\n", cmdline.c_str());
 			if (ret < 0) {
 				log_fprint(log_file, "ERROR: unable to start monitoring on app \"%s(%d)\"\n", cmdline.c_str(), ret);
 				exit(EXIT_FAILURE);
@@ -175,6 +177,8 @@ int main(int argc, char** argv)
 			bytes_sent = send(sock, &sz, sizeof(size_t), 0);
 			for (llc_ca llc : llcs) {
 				bytes_sent = send(sock, &llc.id, sizeof(int), 0);
+				bytes_sent = send(sock, &llc.num_ways, sizeof(unsigned), 0);
+				bytes_sent = send(sock, &llc.way_size, sizeof(unsigned), 0);
 				bytes_sent = send(sock, &llc.clos_count, sizeof(unsigned), 0);
 				for (CLOS clos : llc.clos_list) {
 					bytes_sent = send(sock, &clos, sizeof(CLOS), 0);

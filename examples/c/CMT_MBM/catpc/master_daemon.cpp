@@ -268,6 +268,8 @@ void connection_handler(connection_t* conn)
 				llc_ca& llc = sock_to_llcs[conn->sock].back();			// reference to the new element for better readability
 				
 				bytes_read = recv(conn->sock, &llc.id, sizeof(int), 0);
+				bytes_read = recv(conn->sock, &llc.num_ways, sizeof(unsigned), 0);
+				bytes_read = recv(conn->sock, &llc.way_size, sizeof(unsigned), 0);
 				bytes_read = recv(conn->sock, &llc.clos_count, sizeof(unsigned), 0);
 
 				for (unsigned j = 0; j < llc.clos_count; ++j) {
@@ -347,6 +349,10 @@ void processing_loop()
 					else { // (entry.second->CLOS_id == sock_to_llcs[conn->sock][0].clos_count - 1)
 						entry.second->eval_done = true;
 					}
+				}
+				else {	// eval done => MRC is done
+					entry.second->required_llc = get_required_llc(mrc[entry.second->cmdline], sock_to_llcs[conn->sock]);
+					log_fprint(log_file, "[INFO]: required llc of %s is %.1fKB\n", entry.first.c_str(), entry.second->required_llc / 1024.0);
 				}
 				log_fprint(log_file, "INFO: [%s] -> MRC[%.1fKB] = %1.4f\n", entry.second->cmdline.c_str(), 
 					entry.second->values.llc / 1024.0, (double)entry.second->values.llc_misses / entry.second->values.llc_references);

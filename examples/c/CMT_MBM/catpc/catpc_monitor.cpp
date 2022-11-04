@@ -20,6 +20,7 @@ struct pqos_config config;
 const struct pqos_cpuinfo *p_cpu = NULL;
 const struct pqos_cap *p_cap = NULL;
 const struct pqos_capability *cap_mon = NULL;
+const struct pqos_capability *l3_cap = NULL;
 static enum pqos_mon_event sel_events = (enum pqos_mon_event)0;			// Monitored PQOS events
 static unsigned sel_process_num = 0;												// Maintains the number of process id's we want to track
 
@@ -47,6 +48,11 @@ int init_monitoring()
 	ret = pqos_cap_get_type(p_cap, PQOS_CAP_TYPE_MON, &cap_mon);
 	if (ret != PQOS_RETVAL_OK) {
 				return -1;
+	}
+	/* Get L3 CAT capabilities */
+	ret = pqos_cap_get_type(p_cap, PQOS_CAP_TYPE_L3CA, &l3_cap);
+	if (ret != PQOS_RETVAL_OK) {
+		return -1 * ret; /* L3 CAT not supported */
 	}
 	
 	sel_events = (enum pqos_mon_event)(PQOS_MON_EVENT_L3_OCCUP |
@@ -111,6 +117,7 @@ catpc_system_info get_system_info()
 	si.p_cpu = p_cpu;
 	si.p_cap = p_cap;
 	si.cap_mon = cap_mon;
+	si.l3_cap = l3_cap;
 
 	return si;
 }

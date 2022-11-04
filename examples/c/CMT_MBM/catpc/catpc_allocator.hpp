@@ -13,6 +13,8 @@ struct CLOS {
 
 struct llc_ca {
 	int id;
+	unsigned way_size;
+	unsigned num_ways;
 	unsigned clos_count;
 	std::vector<CLOS> clos_list;
 };
@@ -33,5 +35,14 @@ std::vector<llc_ca> get_allocation_config();
  * @retval -1 error
  */
 int perform_allocation(std::unordered_map<std::string, catpc_application*>&);
+
+/**
+ * @brief Process and return the required amount of llc
+ * 
+ * @param [in] mrc miss rate curve of the application
+ * @param [in] llcs vector of llc info
+ * @return the required llc 
+ */
+uint64_t get_required_llc(const std::map<uint64_t, double>& mrc, const std::vector<llc_ca>& llcs);
 
 #endif

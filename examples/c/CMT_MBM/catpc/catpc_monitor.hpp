@@ -58,6 +58,7 @@ struct catpc_system_info {
 	const struct pqos_cpuinfo *p_cpu = NULL;
 	const struct pqos_cap *p_cap = NULL;
 	const struct pqos_capability *cap_mon = NULL;
+	const struct pqos_capability *l3_cap = NULL;
 };
 
 /**
