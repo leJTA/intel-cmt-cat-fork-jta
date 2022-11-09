@@ -74,7 +74,7 @@ uint64_t get_required_llc(const std::map<uint64_t, double>& mrc, const std::vect
 	}
 
 	while (x.size() > 1) {
-		auto [slope, c] = boost::math::statistics::simple_ordinary_least_squares(x, y);
+		auto [c, slope] = boost::math::statistics::simple_ordinary_least_squares(x, y);
 		if (slope * llc_size > -0.05) {
 			return x[0];
 		}
