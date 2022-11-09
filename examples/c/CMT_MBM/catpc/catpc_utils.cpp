@@ -10,7 +10,7 @@
 int get_pids_by_cmdline(pid_t* pids, const char* cmdline)
 {
 	char filepath[32];
-	char buf[1024];
+	char buf[4096];
 	char c = '\0';
 	int i = 0, sz = 0;
 	pid_t pid;
