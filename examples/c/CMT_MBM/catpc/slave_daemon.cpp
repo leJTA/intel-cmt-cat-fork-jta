@@ -69,6 +69,7 @@ int main(int argc, char** argv)
 	enum catpc_message msg;
 	std::string cmdline;
 	unsigned int CLOS_id;
+	uint64_t required_llc;
 	size_t sz;
 	int ret = 0;
 	char buf[512];
@@ -125,11 +126,12 @@ int main(int argc, char** argv)
 			sz = applications.size();
 			bytes_sent = send(sock, &sz, sizeof(size_t), 0);													// send the number of applications
 			for (std::pair<std::string, catpc_application*> element : applications) {
-				sz = element.first.size();																				
+				catpc_application* app_ptr = element.second;
+				sz = app_ptr->cmdline.size();																				
 				bytes_sent = send(sock, &sz, sizeof(size_t), 0);												// send the length of the cmdline string
-				bytes_sent = send(sock, element.first.c_str(), sz * sizeof(char), 0);					// send the cmdline string
-				bytes_sent = send(sock, &element.second->values, sizeof(catpc_monitoring_values), 0);		// send monitoring values
-				bytes_sent = send(sock, &element.second->CLOS_id, sizeof(unsigned int), 0);					// send CLOS id
+				bytes_sent = send(sock, app_ptr->cmdline.c_str(), sz * sizeof(char), 0);					// send the cmdline string
+				bytes_sent = send(sock, &app_ptr->values, sizeof(catpc_monitoring_values), 0);		// send monitoring values
+				bytes_sent = send(sock, &app_ptr->CLOS_id, sizeof(unsigned int), 0);					// send CLOS id
 			}
 
 			break;
@@ -166,7 +168,7 @@ int main(int argc, char** argv)
 			cmdline.assign(buf, sz);
 
 			// add application to the map
-			applications.erase(cmdline);
+			remove_application(applications, llcs, cmdline);
 			
 			log_fprint(log_file, "INFO: app removed : %s\n", cmdline.c_str());
 			break;
@@ -189,17 +191,38 @@ int main(int argc, char** argv)
 			log_fprint(log_file, "INFO: message received: CATPC_PERFORM_ALLOCATION\n");
 			// read as many times as there are applications
 			for (unsigned i = 0; i < applications.size(); ++i) {
-				// receive cmd line string
 				bytes_read = recv(sock, &sz, sizeof(size_t), 0);
 				bytes_read = recv(sock, buf, sz * sizeof(char), 0);
 				bytes_read = recv(sock, &CLOS_id, sizeof(unsigned int), 0);
+				bytes_read = recv(sock, &required_llc, sizeof(uint64_t), 0);
+				
 				cmdline.assign(buf, sz);
-				log_fprint(log_file, "INFO: %s: COS%u -> COS%u\n", cmdline.c_str(), applications[cmdline]->CLOS_id, CLOS_id);
 				applications[cmdline]->CLOS_id = CLOS_id;
+				applications[cmdline]->required_llc = required_llc;
+				
+				log_fprint(log_file, "INFO: %s: COS%u -> COS%u\n", cmdline.c_str(), applications[cmdline]->CLOS_id, CLOS_id);
 			}
 
 			// perform allocation
-			ret = perform_allocation(applications);
+			for (std::pair<std::string, catpc_application*> element : applications) {
+				catpc_application* app_ptr = element.second;
+				if (app_ptr->required_llc > 0) {
+					if (!app_ptr->smart_alloc_done) {
+						ret = perform_smart_allocation(app_ptr, llcs);
+						if (ret < 0) {
+							log_fprint(log_file, "ERROR: perform_smart_allocation failed (%d)\n", ret);
+						}
+						app_ptr->smart_alloc_done = true;
+					}
+				}
+				else {
+					perform_allocation(app_ptr);
+				}
+			}
+
+
+
+
 			if (ret < 0) {
 				log_fprint(log_file, "ERROR: perform_allocation failed (%d)\n", ret);
 			}

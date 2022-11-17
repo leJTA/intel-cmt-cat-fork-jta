@@ -29,12 +29,12 @@ std::vector<llc_ca> get_allocation_config();
 /**
  * @brief Perform the cache allocation on the applications
  * 
- * @param [in] applications application map list
+ * @param [in] application_ptr application pointer 
  * 
  * @retval 0 OK
  * @retval -1 error
  */
-int perform_allocation(std::unordered_map<std::string, catpc_application*>&);
+int perform_allocation(catpc_application* application_ptr);
 
 /**
  * @brief Process and return the required amount of llc
@@ -45,4 +45,26 @@ int perform_allocation(std::unordered_map<std::string, catpc_application*>&);
  */
 uint64_t get_required_llc(const std::map<uint64_t, double>& mrc, const std::vector<llc_ca>& llcs);
 
+/**
+ * @brief 
+ * 
+ * @param [in] application application to which smart cache allocation is to be performed.
+ * @param [in] llcs constant reference to the list of last level caches.
+ * 
+ * @retval 0 OK
+ * @retval -1 error
+ */
+int perform_smart_allocation(catpc_application* application_ptr, const std::vector<llc_ca>& llcs);
+
+/**
+ * @brief Remove an application from the list of monitored applications.
+ * 
+ * @param [in,out] applications application map list
+ * @param [in] llcs constant reference to the list of last level caches
+ * @param [in] cmdline command line of the application to remove
+ * 
+ * @retval 0 OK
+ * @retval -1 error
+ */
+int remove_application(std::unordered_map<std::string, catpc_application*>& applications, const std::vector<llc_ca>& llcs, const std::string& cmdline);
 #endif

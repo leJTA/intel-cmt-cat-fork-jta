@@ -283,11 +283,13 @@ void connection_handler(connection_t* conn)
 		case CATPC_PERFORM_ALLOCATION:
 			if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
 				for (const std::pair<std::string, catpc_application*>& element : sock_to_application[conn->sock]) {
-					log_fprint(log_file, "DEBUG: perform allocation of [%s]\n", element.first.c_str());
-					len = element.first.size();
+					catpc_application* app_ptr = element.second;
+					log_fprint(log_file, "DEBUG: perform allocation of [%s]\n", app_ptr->cmdline.c_str());
+					len = app_ptr->cmdline.size();
 					send(conn->sock, &len, sizeof(size_t), 0);
-					send(conn->sock, element.first.c_str(), len * sizeof(char), 0);
-					send(conn->sock, &element.second->CLOS_id, sizeof(unsigned int), 0);
+					send(conn->sock, app_ptr->cmdline.c_str(), len * sizeof(char), 0);
+					send(conn->sock, &app_ptr->CLOS_id, sizeof(unsigned int), 0);
+					send(conn->sock, &app_ptr->required_llc, sizeof(uint64_t), 0);
 				}
 			}
 		break;
@@ -350,12 +352,11 @@ void processing_loop()
 						entry.second->eval_done = true;
 					}
 				}
-				else {	// eval done => MRC is done
+				else if (!entry.second->smart_alloc_done) {	// eval done => MRC is done
 					entry.second->required_llc = get_required_llc(mrc[entry.second->cmdline], sock_to_llcs[conn->sock]);
+					changed = true;
 					log_fprint(log_file, "[INFO]: required llc of %s is %.1fKB\n", entry.first.c_str(), entry.second->required_llc / 1024.0);
 				}
-				log_fprint(log_file, "INFO: [%s] -> MRC[%.1fKB] = %1.4f\n", entry.second->cmdline.c_str(), 
-					entry.second->values.llc / 1024.0, (double)entry.second->values.llc_misses / entry.second->values.llc_references);
 			}
 		
 			if (changed) {

@@ -2,9 +2,17 @@
 #include "catpc_monitor.hpp"
 #include "catpc_utils.hpp"
 
+#include <vector>
+#include <functional>
+#include <bitset>
 #include "pqos.h"
 
 #include <boost/math/statistics/linear_regression.hpp>
+
+#define MAX_NUM_WAYS 11
+
+std::vector<double> way_occupancy_ratios;
+std::vector<std::vector<std::reference_wrapper<double>>> CLOS_occupency_ratios;
 
 std::vector<llc_ca> get_allocation_config()
 {
@@ -42,20 +50,34 @@ std::vector<llc_ca> get_allocation_config()
 		}
 	}
 
+	// Init occupancy ratios
+	for (unsigned i = 0; i < si.l3_cap->u.l3ca->num_ways; ++i) {
+		way_occupancy_ratios.push_back(0);
+	}
+
+	for (unsigned i = 0; i < llc_ca_list.back().clos_count; ++i) {
+		CLOS_occupency_ratios.push_back(std::vector<std::reference_wrapper<double>>());
+		std::bitset<MAX_NUM_WAYS> bitmask{ llc_ca_list.back().clos_list[i].mask };
+		for (int j = 0; j < MAX_NUM_WAYS; ++j) {
+			if (bitmask[j] == 1) {
+				CLOS_occupency_ratios.back().push_back(way_occupancy_ratios[j]);
+			}
+		}
+	}
+
 	return llc_ca_list;
 }
 
-int perform_allocation(std::unordered_map<std::string, catpc_application*>& applications)
+int perform_allocation(catpc_application* application_ptr)
 {
 	int ret = 0, sz = 0;
 	pid_t pids[256];
-	for (std::pair<std::string, catpc_application*> element : applications) {
-		sz = get_pids_by_cmdline(pids, element.first.c_str());
-		for (int i = 0; i < sz; ++i) {
-			ret = pqos_alloc_assoc_set_pid(pids[i], element.second->CLOS_id);
-			if (ret != PQOS_RETVAL_OK) {
-				return -1 * ret;
-			}
+	
+	sz = get_pids_by_cmdline(pids, application_ptr->cmdline.c_str());
+	for (int i = 0; i < sz; ++i) {
+		ret = pqos_alloc_assoc_set_pid(pids[i], application_ptr->CLOS_id);
+		if (ret != PQOS_RETVAL_OK) {
+			return -1 * ret;
 		}
 	}
 	return 0;
@@ -84,4 +106,66 @@ uint64_t get_required_llc(const std::map<uint64_t, double>& mrc, const std::vect
 	}
 
 	return x[0];
+}
+
+int perform_smart_allocation(catpc_application* application_ptr, const std::vector<llc_ca>& llcs)
+{
+	int num_llcs = llcs.size();
+	unsigned selected_CLOS_id;
+	unsigned way_size = llcs[0].way_size;
+	double target_occupancy_ratio = -1, curr_occupancy_ratio = 0;
+	
+	// Search for the optimal CLOS
+	for (unsigned i = 0; i < llcs[0].clos_count; ++i) {
+		double CLOS_occupancy = std::accumulate(CLOS_occupency_ratios[i].begin(), CLOS_occupency_ratios[i].end(), 0.0);
+		curr_occupancy_ratio = (double)( application_ptr->required_llc + (CLOS_occupancy * num_llcs * way_size) ) / (CLOS_occupency_ratios[i].size() * num_llcs * way_size);
+		
+		if (
+			(target_occupancy_ratio < 0) || 
+			((curr_occupancy_ratio < target_occupancy_ratio) && (target_occupancy_ratio >= 1)) ||
+			((curr_occupancy_ratio < 1) && (target_occupancy_ratio < 1) && (curr_occupancy_ratio > target_occupancy_ratio))
+		){
+			selected_CLOS_id = i;
+			target_occupancy_ratio = curr_occupancy_ratio;
+		}
+	}
+
+	// Update CLOS occupancy
+	for (unsigned i = 0; i < CLOS_occupency_ratios[selected_CLOS_id].size(); ++i) {
+		CLOS_occupency_ratios[selected_CLOS_id][i] += (double) application_ptr->required_llc / (num_llcs * way_size * CLOS_occupency_ratios[selected_CLOS_id].size());
+	}
+
+	// Perform allocation
+	int ret = 0, sz = 0;
+	pid_t pids[256];
+	sz = get_pids_by_cmdline(pids, application_ptr->cmdline.c_str());
+	for (int i = 0; i < sz; ++i) {
+		ret = pqos_alloc_assoc_set_pid(pids[i], selected_CLOS_id);
+		if (ret != PQOS_RETVAL_OK) {
+			return -1 * ret;
+		}
+		application_ptr->CLOS_id = selected_CLOS_id;
+	}
+	return 0;
+}
+
+int remove_application(std::unordered_map<std::string, catpc_application*>& applications, const std::vector<llc_ca>& llcs, const std::string& cmdline)
+{
+	if (applications.find(cmdline) != applications.end()) {
+		return -1;
+	}
+	
+	catpc_application* app_ptr = applications[cmdline];
+	int num_llcs = llcs.size();
+	unsigned way_size = llcs[0].way_size;
+
+	// Update CLOS occupancy
+	for (unsigned i = 0; i < CLOS_occupency_ratios[app_ptr->CLOS_id].size(); ++i) {
+		CLOS_occupency_ratios[app_ptr->CLOS_id][i] -= (double) app_ptr->required_llc / (num_llcs * way_size * CLOS_occupency_ratios[app_ptr->CLOS_id].size());
+	}
+
+	// Remove from app list
+	applications.erase(cmdline);
+
+	return 0;
 }
