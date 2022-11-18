@@ -129,6 +129,7 @@ int perform_smart_allocation(catpc_application* application_ptr, const std::vect
 			target_occupancy_ratio = curr_occupancy_ratio;
 		}
 	}
+	application_ptr->CLOS_id = selected_CLOS_id;
 
 	// Update CLOS occupancy
 	for (unsigned i = 0; i < CLOS_occupency_ratios[selected_CLOS_id].size(); ++i) {
@@ -144,8 +145,8 @@ int perform_smart_allocation(catpc_application* application_ptr, const std::vect
 		if (ret != PQOS_RETVAL_OK) {
 			return -1 * ret;
 		}
-		application_ptr->CLOS_id = selected_CLOS_id;
 	}
+		
 	return 0;
 }
 

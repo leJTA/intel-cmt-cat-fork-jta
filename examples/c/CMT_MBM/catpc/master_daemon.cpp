@@ -351,13 +351,13 @@ void processing_loop()
 					}
 					else { // (app_ptr->CLOS_id == sock_to_llcs[conn->sock][0].clos_count - 1)
 						app_ptr->eval_done = true;
-						log_fprint(log_file, "[INFO]: required llc of %s is %.1fKB\n", entry.first.c_str(), app_ptr->required_llc / 1024.0);
 					}
 				}
 				else if (!app_ptr->smart_alloc_done) {	// eval done => MRC is done
 					app_ptr->required_llc = get_required_llc(mrc[app_ptr->cmdline], sock_to_llcs[conn->sock]);
 					app_ptr->smart_alloc_done = true;
 					changed = true;
+					log_fprint(log_file, "INFO: required llc of %s is %.1fKB\n", entry.first.c_str(), app_ptr->required_llc / 1024.0);
 				}
 			}
 		

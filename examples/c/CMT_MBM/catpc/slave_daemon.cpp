@@ -195,12 +195,11 @@ int main(int argc, char** argv)
 				bytes_read = recv(sock, buf, sz * sizeof(char), 0);
 				bytes_read = recv(sock, &CLOS_id, sizeof(unsigned int), 0);
 				bytes_read = recv(sock, &required_llc, sizeof(uint64_t), 0);
+				log_fprint(log_file, "INFO: %s: COS%u -> COS%u\n", cmdline.c_str(), applications[cmdline]->CLOS_id, CLOS_id);
 				
 				cmdline.assign(buf, sz);
 				applications[cmdline]->CLOS_id = CLOS_id;
 				applications[cmdline]->required_llc = required_llc;
-				
-				log_fprint(log_file, "INFO: %s: COS%u -> COS%u\n", cmdline.c_str(), applications[cmdline]->CLOS_id, CLOS_id);
 			}
 
 			// perform allocation
@@ -213,23 +212,16 @@ int main(int argc, char** argv)
 							log_fprint(log_file, "ERROR: perform_smart_allocation failed (%d)\n", ret);
 						}
 						app_ptr->smart_alloc_done = true;
+						log_fprint(log_file, "DEBUG: smart allocation done for %s : COS%d\n", app_ptr->cmdline.c_str(), app_ptr->CLOS_id);
 					}
 				}
 				else {
-					perform_allocation(app_ptr);
+					ret = perform_allocation(app_ptr);
+					if (ret < 0) {
+						log_fprint(log_file, "ERROR: perform_allocation failed (%d)\n", ret);
+					}
 				}
 			}
-
-
-
-
-			if (ret < 0) {
-				log_fprint(log_file, "ERROR: perform_allocation failed (%d)\n", ret);
-			}
-			else {
-				log_fprint(log_file, "INFO: perform_allocation success\n");
-			}
-
 			break;
 		default:
 			log_fprint(log_file, "ERROR: unknow message value: %d\n", msg);
