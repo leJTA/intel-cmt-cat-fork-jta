@@ -336,26 +336,28 @@ void processing_loop()
 		bool changed = false;
 		for (connection_t* conn : connections) {
 			for (const auto& entry : sock_to_application[conn->sock]) {
-				// If the CLOS_id done is less than the last CLOS_id, continue MRC evaluation to the next CLOS 
-				if (!entry.second->eval_done) {
-					mrc[entry.second->cmdline][entry.second->values.llc] = (double)entry.second->values.llc_misses / entry.second->values.llc_references;
-					if (entry.second->CLOS_id < sock_to_llcs[conn->sock][0].clos_count - 1) {
+				catpc_application* app_ptr = entry.second;
+				// If the CLOS_id done is less than the last CLOS_id, continue MRC evaluation to the next CLOS
+				if (!app_ptr->eval_done) {
+					mrc[app_ptr->cmdline][app_ptr->values.llc] = (double)app_ptr->values.llc_misses / app_ptr->values.llc_references;
+					if (app_ptr->CLOS_id < sock_to_llcs[conn->sock][0].clos_count - 1) {
 						// Go to the next CLOS
-						entry.second->CLOS_id++;
+						app_ptr->CLOS_id++;
 						
 						// Avoid out of bound CLOS_id
-						assert(entry.second->CLOS_id < sock_to_llcs[conn->sock][0].clos_count);
+						assert(app_ptr->CLOS_id < sock_to_llcs[conn->sock][0].clos_count);
 
 						changed = true;
 					}
-					else { // (entry.second->CLOS_id == sock_to_llcs[conn->sock][0].clos_count - 1)
-						entry.second->eval_done = true;
+					else { // (app_ptr->CLOS_id == sock_to_llcs[conn->sock][0].clos_count - 1)
+						app_ptr->eval_done = true;
+						log_fprint(log_file, "[INFO]: required llc of %s is %.1fKB\n", entry.first.c_str(), app_ptr->required_llc / 1024.0);
 					}
 				}
-				else if (!entry.second->smart_alloc_done) {	// eval done => MRC is done
-					entry.second->required_llc = get_required_llc(mrc[entry.second->cmdline], sock_to_llcs[conn->sock]);
+				else if (!app_ptr->smart_alloc_done) {	// eval done => MRC is done
+					app_ptr->required_llc = get_required_llc(mrc[app_ptr->cmdline], sock_to_llcs[conn->sock]);
+					app_ptr->smart_alloc_done = true;
 					changed = true;
-					log_fprint(log_file, "[INFO]: required llc of %s is %.1fKB\n", entry.first.c_str(), entry.second->required_llc / 1024.0);
 				}
 			}
 		

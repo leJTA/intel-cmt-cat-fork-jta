@@ -111,7 +111,7 @@ uint64_t get_required_llc(const std::map<uint64_t, double>& mrc, const std::vect
 int perform_smart_allocation(catpc_application* application_ptr, const std::vector<llc_ca>& llcs)
 {
 	int num_llcs = llcs.size();
-	unsigned selected_CLOS_id;
+	unsigned selected_CLOS_id = 0;
 	unsigned way_size = llcs[0].way_size;
 	double target_occupancy_ratio = -1, curr_occupancy_ratio = 0;
 	
