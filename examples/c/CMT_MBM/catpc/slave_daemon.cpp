@@ -170,7 +170,7 @@ int main(int argc, char** argv)
 			// add application to the map
 			remove_application(applications, llcs, cmdline);
 			
-			log_fprint(log_file, "INFO: app removed : %s\n", cmdline.c_str());
+			log_fprint(log_file, "INFO: app removed : %s (size=%d)\n", cmdline.c_str(), applications.size());
 			break;
 
 		case CATPC_GET_CAPABILITIES:

@@ -152,7 +152,7 @@ int perform_smart_allocation(catpc_application* application_ptr, const std::vect
 
 int remove_application(std::unordered_map<std::string, catpc_application*>& applications, const std::vector<llc_ca>& llcs, const std::string& cmdline)
 {
-	if (applications.find(cmdline) != applications.end()) {
+	if (applications.find(cmdline) == applications.end()) {
 		return -1;
 	}
 	
