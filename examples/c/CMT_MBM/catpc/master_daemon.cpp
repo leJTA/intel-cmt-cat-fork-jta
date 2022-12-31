@@ -219,6 +219,7 @@ void connection_handler(connection_t* conn)
 		case CATPC_REMOVE_APP_TO_MONITOR:
 			delete sock_to_application[conn->sock][cmdline];
 			sock_to_application[conn->sock].erase(cmdline);
+			sock_to_mrc[conn->sock].erase(cmdline);
 			[[gnu::fallthrough]];
 
 		case CATPC_ADD_APP_TO_MONITOR:
@@ -250,6 +251,10 @@ void connection_handler(connection_t* conn)
 
 					// Read CLOS id
 					bytes_read = recv(conn->sock, &ptr->CLOS_id, sizeof(unsigned int), 0);
+
+					//log_fprint(log_file, "[DEBUG] : MRC[%s][%fKB] = %f\n", 
+					//	ptr->cmdline.c_str(), ptr->values.llc / 1024.0, 
+					//	(double)ptr->values.llc_misses / ptr->values.llc_references);
 				}
 				// Notify the loop processing thread
 				{
@@ -284,7 +289,6 @@ void connection_handler(connection_t* conn)
 			if ((bytes_sent = send(conn->sock, &msg, sizeof(msg), 0)) > 0) {
 				for (const std::pair<std::string, catpc_application*>& element : sock_to_application[conn->sock]) {
 					catpc_application* app_ptr = element.second;
-					log_fprint(log_file, "DEBUG: perform allocation of [%s]\n", app_ptr->cmdline.c_str());
 					len = app_ptr->cmdline.size();
 					send(conn->sock, &len, sizeof(size_t), 0);
 					send(conn->sock, app_ptr->cmdline.c_str(), len * sizeof(char), 0);

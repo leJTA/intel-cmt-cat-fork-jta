@@ -49,12 +49,12 @@ uint64_t get_required_llc(const std::map<uint64_t, double>& mrc, const std::vect
  * @brief 
  * 
  * @param [in] application application to which smart cache allocation is to be performed.
- * @param [in] llcs constant reference to the list of last level caches.
+ * @param [in] llcs reference to the list of last level caches.
  * 
  * @retval 0 OK
  * @retval -1 error
  */
-int perform_smart_allocation(catpc_application* application_ptr, const std::vector<llc_ca>& llcs);
+int perform_smart_allocation(catpc_application* application_ptr, std::vector<llc_ca>& llcs);
 
 /**
  * @brief Remove an application from the list of monitored applications.

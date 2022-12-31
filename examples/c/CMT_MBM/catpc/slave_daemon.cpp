@@ -150,7 +150,6 @@ int main(int argc, char** argv)
 			// start monitoring on app launched by the command line
 			set_logfile(log_file);
 			ret = start_monitoring(cmdline);
-			log_fprint(log_file, "[DEBUG]: %s\n", cmdline.c_str());
 			if (ret < 0) {
 				log_fprint(log_file, "ERROR: unable to start monitoring on app \"%s(%d)\"\n", cmdline.c_str(), ret);
 				exit(EXIT_FAILURE);
