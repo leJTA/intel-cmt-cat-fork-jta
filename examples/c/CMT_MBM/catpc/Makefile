@@ -6,7 +6,7 @@ CFLAGS = -I $(LIBDIR) -I . -lpthread -lboost_math_tr1 -g3 -O2 -std=gnu++17 -Wall
 	-Wunreachable-code -Wsign-compare -Wno-endif-labels
 
 LDFLAGS = -L$(LIBDIR) -pie -z noexecstack -z relro -z now
-LDLIBS = -lpthread -lpqos
+LDLIBS = -lpthread -lpqos -lcgroup
 
 SRCS = catpc_utils.cpp catpc_allocator.cpp catpc_monitor.cpp
 OBJS = $(SRCS:.cpp=.o)

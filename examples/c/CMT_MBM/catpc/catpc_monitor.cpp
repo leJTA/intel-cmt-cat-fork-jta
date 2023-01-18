@@ -10,6 +10,7 @@
 #include <string>
 #include <stdint.h>
 #include <assert.h>
+#include <libcgroup.h>
 
 static FILE* test_log;
 void set_logfile(FILE* file) {test_log = file;}
@@ -75,6 +76,22 @@ int start_monitoring(const std::string& cmdline)
 	if (ret != PQOS_RETVAL_OK) {
 		return -1 * ret;
 	}
+
+	// add procs to cgroup
+	ret = cgroup_init();
+	if (ret > 0) {
+		return -1 * ret;
+	}
+	struct cgroup* cg = cgroup_new_cgroup("catpc");
+	cgroup_add_controller(cg, "cpuset");
+	
+	for (unsigned i = 0; i < sel_process_num; ++i) {
+		ret = cgroup_attach_task_pid(cg, pids[i]);
+		if (ret > 0) {
+			return -1 * ret;
+		}
+	}
+	cgroup_free(&cg);
 
 	return 0;
 }
