@@ -14,7 +14,7 @@
 std::vector<double> way_occupancy_ratios;
 std::vector<std::vector<std::reference_wrapper<double>>> CLOS_occupency_ratios;
 
-std::vector<llc_ca> get_allocation_config()
+std::vector<llc_ca> get_allocation_config() 
 {
 	int ret;
 	unsigned l3cat_id_count, *l3cat_ids = NULL;
@@ -116,7 +116,7 @@ int perform_smart_allocation(catpc_application* application_ptr, std::vector<llc
 	double target_occupancy_ratio = -1, curr_occupancy_ratio = 0;
 	
 	// Search for the optimal CLOS
-	for (unsigned i = 1; i < llcs[0].clos_count; ++i) {
+	for (unsigned i = 0; i < llcs[0].clos_count - 1; ++i) {
 		double CLOS_occupancy = std::accumulate(CLOS_occupency_ratios[i].begin(), CLOS_occupency_ratios[i].end(), 0.0);
 		curr_occupancy_ratio = (double)( application_ptr->required_llc + (CLOS_occupancy * num_llcs * way_size) ) / (CLOS_occupency_ratios[i].size() * num_llcs * way_size);
 		
@@ -151,10 +151,10 @@ int perform_smart_allocation(catpc_application* application_ptr, std::vector<llc
 	unsigned num;
 	tab[0].class_id = 0;
 	for (unsigned i = 0; i < llcs.size(); ++i) {
-		ret = pqos_l3ca_get(i, PQOS_MAX_L3CA_COS, &num, tab);
+		ret = pqos_l3ca_get(i, PQOS_MAX_L3CA_COS, &num, tab);	// num = clos_count
 
-		llcs[i].clos_list[0].mask = (0x7ff ^ llcs[i].clos_list[selected_CLOS_id].mask) | 0x700;
-		tab[0].u.ways_mask = llcs[i].clos_list[0].mask;
+		llcs[i].clos_list[num - 1].mask = (0x7ff ^ llcs[i].clos_list[selected_CLOS_id].mask) | 0x1;
+		tab[num - 1].u.ways_mask = llcs[i].clos_list[num - 1].mask;
 		
 		ret = pqos_l3ca_set(i, 1, tab);
 		if (ret != PQOS_RETVAL_OK) {
