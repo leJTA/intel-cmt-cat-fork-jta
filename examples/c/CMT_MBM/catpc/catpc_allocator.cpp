@@ -156,7 +156,7 @@ int perform_smart_allocation(catpc_application* application_ptr, std::vector<llc
 		llcs[i].clos_list[num - 1].mask = (0x7ff ^ llcs[i].clos_list[selected_CLOS_id].mask) | 0x400;
 		tab[num - 1].u.ways_mask = llcs[i].clos_list[num - 1].mask;
 		
-		ret = pqos_l3ca_set(i, 1, tab);
+		ret = pqos_l3ca_set(i, num, tab);
 		if (ret != PQOS_RETVAL_OK) {
 			return -1 * ret;
 		}
