@@ -32,7 +32,7 @@ void termination_handler(int signum);
 void watch_started_app();
 void watch_terminated_app();
 
-const std::chrono::milliseconds period{200};
+const std::chrono::milliseconds period{500};
 
 int sock;
 FILE* log_file = NULL;
@@ -337,13 +337,15 @@ void processing_loop()
 			global_cv.wait(lk);
 		} while (++i < client_count);
 
-		bool changed = false;
+		bool allocation_changed = false;
+		bool mrc_completed = false;
 		for (connection_t* conn : connections) {
 			for (const auto& entry : sock_to_application[conn->sock]) {
 				catpc_application* app_ptr = entry.second;
 				// If the CLOS_id done is less than the last CLOS_id, continue MRC evaluation to the next CLOS
 				if (!app_ptr->eval_done) {
 					mrc[app_ptr->cmdline][app_ptr->values.llc] = (double)app_ptr->values.llc_misses / app_ptr->values.llc_references;
+					log_fprint(log_file, "DEBUG: MRC[%.1fKB] = %.3f\n", app_ptr->values.llc / 1024.0, (double)app_ptr->values.llc_misses / app_ptr->values.llc_references);
 					if (app_ptr->CLOS_id < sock_to_llcs[conn->sock][0].clos_count - 1) {
 						// Go to the next CLOS
 						app_ptr->CLOS_id++;
@@ -351,21 +353,31 @@ void processing_loop()
 						// Avoid out of bound CLOS_id
 						assert(app_ptr->CLOS_id < sock_to_llcs[conn->sock][0].clos_count);
 
-						changed = true;
+						allocation_changed = true;
 					}
 					else { // (app_ptr->CLOS_id == sock_to_llcs[conn->sock][0].clos_count - 1)
 						app_ptr->eval_done = true;
 					}
 				}
-				else if (!app_ptr->smart_alloc_done) {	// eval done => MRC is done
+				else if (!app_ptr->smart_alloc_done) {	// eval done => MRC is completed
+					mrc_completed = true;
+					allocation_changed = true;
+				}
+			}
+		}
+
+		// Send notification and get required llc if MRC is completed
+		for (connection_t* conn : connections) {
+			if (mrc_completed) {
+				for (const auto& entry : sock_to_application[conn->sock]) {
+					catpc_application* app_ptr = entry.second;
 					app_ptr->required_llc = get_required_llc(mrc[app_ptr->cmdline], sock_to_llcs[conn->sock]);
 					app_ptr->smart_alloc_done = true;
-					changed = true;
 					log_fprint(log_file, "INFO: required llc of %s is %.1fKB\n", entry.first.c_str(), app_ptr->required_llc / 1024.0);
 				}
 			}
-		
-			if (changed) {
+
+			if (allocation_changed) {
 				// Push perform allocation notification message
 				notification_t& notif = sock_to_notification[conn->sock];
 				std::lock_guard<std::mutex> lk{notif.mtx};

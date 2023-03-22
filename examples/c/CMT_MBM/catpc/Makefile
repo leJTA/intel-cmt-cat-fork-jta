@@ -26,6 +26,9 @@ dump:
 $(MASTER): $(MASTER).o $(OBJS)
 $(SLAVE): $(SLAVE).o $(OBJS)
 
+kill:
+	sudo ./stop_daemon.sh
+
 clean:
 	-rm -f $(MASTER) $(SLAVE) ./*.o
 
