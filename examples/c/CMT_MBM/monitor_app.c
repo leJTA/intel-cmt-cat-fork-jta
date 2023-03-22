@@ -37,6 +37,7 @@
  */
 
 #include "pqos.h"
+#include "monitoring.h"
 
 #include <signal.h>
 #include <stdio.h>
@@ -50,7 +51,7 @@
  * Defines
  */
 #define PQOS_MAX_CORES      1024
-#define PQOS_MAX_PIDS       16
+#define PQOS_MAX_PIDS       128
 #define PQOS_MAX_MON_EVENTS 1
 
 /**
@@ -160,13 +161,18 @@ process_mode(void)
 static void
 monitoring_get_input(int argc, char *argv[])
 {
-        int num_args, num_opts = 1, i = 0, sel_pid = 0, help = 0;
+        int num_args, num_opts = 1, i = 0, sel_pid = 0, help = 0, recursive = 0;
 
         for (i = 0; i < argc; i++) {
                 if (!strcmp(argv[i], "-p")) {
                         sel_pid = 1;
                         num_opts++;
-                } else if (!strcmp(argv[i], "-I")) {
+                } 
+                else if (!strcmp(argv[i], "-r")) {
+                        recursive = 1;
+                        num_opts++;
+                }
+                else if (!strcmp(argv[i], "-I")) {
                         interface = PQOS_INTER_OS;
                         num_opts++;
                 } else if (!strcmp(argv[i], "-H") || !strcmp(argv[i], "-h")) {
@@ -191,6 +197,7 @@ monitoring_get_input(int argc, char *argv[])
                        "-h      help\n        "
                        "-I      select library OS interface\n        "
                        "-p      select process ID's to monitor LLC occupancy"
+                       "-r      select child processes recursively"
                        "\n\n",
                        argv[0], argv[0]);
                 exit(EXIT_SUCCESS);
@@ -237,14 +244,16 @@ setup_monitoring(const struct pqos_cpuinfo *cpu_info,
 {
         unsigned i;
         const enum pqos_mon_event perf_events = (enum pqos_mon_event)(
-            PQOS_PERF_EVENT_IPC | PQOS_PERF_EVENT_LLC_MISS |
-            PQOS_PERF_EVENT_LLC_REF);
+            PQOS_PERF_EVENT_IPC | PQOS_PERF_EVENT_LLC_MISS);
 
         const enum pqos_mon_event uncore_events =
             (enum pqos_mon_event)(PQOS_PERF_EVENT_LLC_MISS_PCIE_READ |
                                   PQOS_PERF_EVENT_LLC_MISS_PCIE_WRITE |
                                   PQOS_PERF_EVENT_LLC_REF_PCIE_READ |
-                                  PQOS_PERF_EVENT_LLC_REF_PCIE_WRITE);
+                                  PQOS_PERF_EVENT_LLC_REF_PCIE_WRITE | 
+											 PQOS_MON_EVENT_LMEM_BW |
+											 PQOS_MON_EVENT_TMEM_BW |
+											 PQOS_MON_EVENT_RMEM_BW);
 
         for (i = 0; (unsigned)i < cap_mon->u.mon->num_events; i++)
                 sel_events_max |= (cap_mon->u.mon->events[i].type);
@@ -288,7 +297,7 @@ setup_monitoring(const struct pqos_cpuinfo *cpu_info,
                         int ret;
 
                         ret = pqos_mon_start_pids(1, &pid,
-                                                  PQOS_MON_EVENT_L3_OCCUP, NULL,
+                                                  sel_events_max, NULL,
                                                   sel_monitor_pid_tab[i].pgrp);
                         if (ret != PQOS_RETVAL_OK) {
                                 printf("Monitoring start error on pid %u,"
@@ -350,32 +359,39 @@ monitoring_loop(void)
                         return;
                 }
                 if (!process_mode()) {
-                        printf("    CORE    LLC[KB]    MBL[MB]    MBR[MB]\n");
+                        printf("    CORE    LLC[KB]       LLC[MISSES]       LLC[REF]\n");
                         for (i = 0; i < sel_monitor_num; i++) {
                                 const struct pqos_event_values *pv =
                                     &m_mon_grps[i]->values;
                                 double llc = bytes_to_kb(pv->llc);
-                                double mbr = bytes_to_mb(pv->mbm_remote_delta);
-                                double mbl = bytes_to_mb(pv->mbm_local_delta);
+										  double misses = (pv->llc_misses_delta)/1000;
+										  double references = (m_mon_grps[i]->intl->values.llc_references_delta)/1000;
 
-                                printf("%8u %10.1f %10.1f %10.1f\n",
-                                       m_mon_grps[i]->cores[0], llc, mbl, mbr);
+                                printf("%8u %10.1f       %10.1fk    %10.1fk\n",
+                                       m_mon_grps[i]->cores[0], llc, misses, references);
                         }
 
                 } else {
-                        printf("PID       LLC[KB]\n");
+                        printf("PID         IPC    LLC[KB]   LLC MISSES      LLC REF    MISS RATIO\n");
                         for (i = 0; i < sel_process_num; i++) {
                                 const struct pqos_event_values *pv =
                                     &m_mon_grps[i]->values;
+										  double ipc = pv->ipc;
+										  double retired = (pv->ipc_retired)/1000000.0;
                                 double llc = bytes_to_kb(pv->llc);
+										  double misses = (pv->llc_misses_delta)/1000.0;
+										  double references = 
+										  		(m_mon_grps[i]->intl->values.llc_references_delta)/1000.0;
+										  double miss_rate = 100 * (misses / references); 
 
-                                printf("%6d %10.1f\n", m_mon_grps[i]->pids[0],
-                                       llc);
+                                printf("%6d   %1.3f %10.1f  %10.1fk  %10.1fk       %2.3f\%\n", m_mon_grps[i]->pids[0],
+                                       ipc, llc, misses, references, miss_rate);
                         }
                 }
                 printf("\nPress Enter to continue or Ctrl+c to exit");
-                if (getchar() != '\n')
-                        break;
+                sleep(1);
+					 //if (getchar() != '\n')
+                //		break;
                 printf("\e[1;1H\e[2J");
         }
 }
