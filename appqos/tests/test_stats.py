@@ -30,24 +30,15 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ################################################################################
 
-"""
-Unit tests for appqos.stats module
-"""
+import pytest
+import mock
+import common
 
-import pytest #pylint: disable=unused-import
-
-from appqos.stats import StatsStore
+from stats import *
 
 class TestStats(object):
-    #pylint: disable=no-self-use
-    """
-    Test StatStore class
-    """
 
     def test_stats_init(self):
-        """
-        Test initial stats values
-        """
         stats_store = StatsStore()
 
         gen_stats = stats_store.general_stats_get()
@@ -57,72 +48,60 @@ class TestStats(object):
 
 
     def test_stats_inc_num_apps_moves(self):
-        """
-        Test general_stats_inc_apps_moves()
-        """
         stats_store = StatsStore()
 
         gen_stats = stats_store.general_stats_get()
         assert gen_stats['num_apps_moves'] == 0
 
-        stats_moves = 6
+        INC_CNT = 6
 
-        for _ in range(stats_moves):
+        for _ in range(INC_CNT):
             stats_store.general_stats_inc_apps_moves()
 
         gen_stats = stats_store.general_stats_get()
-        assert gen_stats['num_apps_moves'] == stats_moves
+        assert gen_stats['num_apps_moves'] == INC_CNT
 
         gen_stats_moves = stats_store.general_stats_get(StatsStore.General.NUM_APPS_MOVES)
-        assert gen_stats_moves == stats_moves
+        assert gen_stats_moves == INC_CNT
 
 
     def test_stats_inc_num_err(self):
-        """
-        Test general_stats_inc_num_err()
-        """
         stats_store = StatsStore()
 
         gen_stats = stats_store.general_stats_get()
         assert gen_stats['num_err'] == 0
 
-        stats_err = 2
+        INC_CNT = 2
 
-        for _ in range(stats_err):
+        for _ in range(INC_CNT):
             stats_store.general_stats_inc_num_err()
 
         gen_stats = stats_store.general_stats_get()
-        assert gen_stats['num_err'] == stats_err
+        assert gen_stats['num_err'] == INC_CNT
 
         gen_stats_err = stats_store.general_stats_get(StatsStore.General.NUM_ERR)
-        assert gen_stats_err == stats_err
+        assert gen_stats_err == INC_CNT
 
 
     def test_stats_inc_num_invalid_access(self):
-        """
-        Test general_stats_inc_num_invalid_access()
-        """
         stats_store = StatsStore()
 
         gen_stats = stats_store.general_stats_get()
         assert gen_stats['num_invalid_access_attempts'] == 0
 
-        stats_invalid_access = 4
+        INC_CNT = 4
 
-        for _ in range(stats_invalid_access):
+        for _ in range(INC_CNT):
             stats_store.general_stats_inc_num_invalid_access()
 
         gen_stats = stats_store.general_stats_get()
-        assert gen_stats['num_invalid_access_attempts'] == stats_invalid_access
+        assert gen_stats['num_invalid_access_attempts'] == INC_CNT
 
         gen_stats_invalid_access = stats_store.general_stats_get(StatsStore.General.NUM_INV_ACCESS)
-        assert gen_stats_invalid_access == stats_invalid_access
+        assert gen_stats_invalid_access == INC_CNT
 
 
     def test_stats_get(self):
-        """
-        Test general_stats_get() invalid params
-        """
         stats_store = StatsStore()
 
         gen_stats = stats_store.general_stats_get("inexisting_stats")

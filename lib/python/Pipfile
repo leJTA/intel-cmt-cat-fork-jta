@@ -10,6 +10,5 @@ bandit = "*"
 pylint = ">=2.5.0"
 coverage = "*"
 caniusepython3 = "*"
-build = "*"
 
 [requires]

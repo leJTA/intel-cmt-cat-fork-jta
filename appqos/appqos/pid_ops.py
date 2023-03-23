@@ -37,8 +37,7 @@ Provides PIDs related helper functions
 
 import os
 import psutil
-
-from appqos import log
+import log
 
 # list of valid PIDs' status, Running, Sleeping, Disk wait
 PID_VALID_STATUS = {psutil.STATUS_RUNNING, psutil.STATUS_SLEEPING,

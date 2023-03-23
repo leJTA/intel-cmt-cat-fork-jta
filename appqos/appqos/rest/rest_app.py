@@ -40,13 +40,15 @@ from flask_restful import Resource, request
 
 import jsonschema
 
-from appqos import common
-from appqos import pid_ops
-from appqos.config_store import ConfigStore
-from appqos.power import AdmissionControlError
-from appqos.rest.rest_exceptions import NotFound, BadRequest
-from appqos.pqos_api import PQOS_API
-from appqos.stats import STATS_STORE
+import common
+import pid_ops
+
+from power import AdmissionControlError
+
+from rest.rest_exceptions import NotFound, BadRequest
+
+from config_store import ConfigStore
+
 
 class App(Resource):
     """
@@ -196,7 +198,7 @@ class App(Resource):
 
             ConfigStore.set_config(data)
             if 'pool_id' in json_data:
-                STATS_STORE.general_stats_inc_apps_moves()
+                common.STATS_STORE.general_stats_inc_apps_moves()
 
             res = {'message': f"APP {app_id} updated"}
             return res, 200
@@ -273,7 +275,7 @@ class Apps(Resource):
             # make existing pool a destination pool for app
             if 'cores' in json_data and json_data['cores']:
                 for core in json_data['cores']:
-                    if not PQOS_API.check_core(core):
+                    if not common.PQOS_API.check_core(core):
                         raise BadRequest(f"New APP not added, invalid core: {core}")
                 for pool in data['pools']:
                     if set(json_data['cores']).issubset(pool['cores']):
@@ -306,7 +308,7 @@ class Apps(Resource):
         except Exception as ex:
             raise BadRequest(f"New APP not added, {ex}") from ex
 
-        ConfigStore.set_config(data)
+        ConfigStore().set_config(data)
 
         res = {
             'id': json_data['id'],

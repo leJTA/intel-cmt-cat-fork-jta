@@ -35,7 +35,7 @@
 
 VENV_DIR?=../../venv/lib_$(shell hostname)
 
-.PHONY: test coverage style clean setup setup-dev build
+.PHONY: test coverage style clean setup setup-dev
 
 $(VENV_DIR): Pipfile
 	WORKON_HOME=$(VENV_DIR) pipenv install --skip-lock
@@ -58,9 +58,6 @@ pylint: $(VENV_DIR)
 
 bandit: $(VENV_DIR)
 	WORKON_HOME=$(VENV_DIR) pipenv run python -m bandit *.py pqos/*.py
-
-build: $(VENV_DIR)
-	WORKON_HOME=$(VENV_DIR) pipenv run python3 -m build
 
 CODESPELL?=codespell
 .PHONY: codespell

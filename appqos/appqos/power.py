@@ -36,9 +36,10 @@ Power module
 
 from copy import deepcopy
 
-from appqos import log
-from appqos import power_common
-from appqos import sstbf
+import log
+
+import power_common
+import sstbf
 
 VALID_EPP = ["performance", "balance_performance", "balance_power", "power"]
 DEFAULT_EPP = "balance_power"

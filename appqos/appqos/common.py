@@ -35,10 +35,14 @@ Common global constants and instances
 """
 
 import errno
+import multiprocessing
 import os
 
+import pqos_api # pylint: disable=cyclic-import
+import stats # pylint: disable=cyclic-import
+
+
 CONFIG_FILENAME = "appqos.conf"
-CONFIG_DIR = "/opt/intel/appqos"
 CAT_L3_CAP = "l3cat"
 CAT_L2_CAP = "l2cat"
 DEFAULT_ADDRESS = "127.0.0.1"
@@ -47,6 +51,11 @@ SSTBF_CAP = "sstbf"
 POWER_CAP = "power"
 
 RATE_LIMIT = 10 # rate limit of configuration changes in HZ
+
+MANAGER = multiprocessing.Manager()
+STATS_STORE = stats.StatsStore()
+PQOS_API = pqos_api.PqosApi()
+
 
 def check_link(path, flags):
     """
